@@ -78,8 +78,59 @@ class Asset(Base):
     media_info: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     warnings: Mapped[list[str]] = mapped_column(JSON, default=list)
     import_job_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    analysis_job_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
     error_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
     error_message: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    created_at: Mapped[float] = mapped_column(Float, default=time.time)
+    updated_at: Mapped[float] = mapped_column(Float, default=time.time, onupdate=time.time)
+
+
+class Transcript(Base):
+    """Transcript metadata; the words live in storage (derived/transcript.json) because they can be large."""
+
+    __tablename__ = "transcripts"
+    asset_id: Mapped[str] = mapped_column(
+        String(32), ForeignKey("assets.id", ondelete="CASCADE"), primary_key=True
+    )
+    language: Mapped[str] = mapped_column(String(16))
+    language_probability: Mapped[float | None] = mapped_column(Float, nullable=True)
+    model: Mapped[str] = mapped_column(String(64))
+    device: Mapped[str] = mapped_column(String(16))
+    word_count: Mapped[int] = mapped_column(Integer)
+    seconds_taken: Mapped[float] = mapped_column(Float)
+    edited: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[float] = mapped_column(Float, default=time.time)
+
+
+class ClipStatus(enum.StrEnum):
+    SUGGESTED = "suggested"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+
+
+class Clip(Base):
+    """A time range of a source video. AI suggestions and manual clips share this table.
+
+    `version` increments on every change (optimistic concurrency: PATCH requires If-Match).
+    """
+
+    __tablename__ = "clips"
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=new_id)
+    project_id: Mapped[str] = mapped_column(
+        String(32), ForeignKey("projects.id", ondelete="CASCADE"), index=True
+    )
+    asset_id: Mapped[str] = mapped_column(String(32), ForeignKey("assets.id", ondelete="CASCADE"), index=True)
+    start_ms: Mapped[int] = mapped_column(Integer)
+    end_ms: Mapped[int] = mapped_column(Integer)
+    origin: Mapped[str] = mapped_column(String(16))  # "ai" | "manual"
+    status: Mapped[str] = mapped_column(String(16), default=ClipStatus.SUGGESTED)
+    score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    rank: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    reasons: Mapped[list[str]] = mapped_column(JSON, default=list)
+    features: Mapped[dict[str, float]] = mapped_column(JSON, default=dict)
+    title: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    edit: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)  # captions/layout (M4/M5)
+    version: Mapped[int] = mapped_column(Integer, default=1)
     created_at: Mapped[float] = mapped_column(Float, default=time.time)
     updated_at: Mapped[float] = mapped_column(Float, default=time.time, onupdate=time.time)
 

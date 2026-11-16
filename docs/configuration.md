@@ -18,6 +18,14 @@ A test (`backend/tests/test_config.py`) fails if a setting exists that is not do
 | `CLIPPER_JOB_RETRY_BACKOFF_SECONDS` | `[30,120,600]` | Delay before retry *n* (the last value repeats). |
 | `CLIPPER_WORKER_POLL_SECONDS` | `1.0` | Idle polling interval of workers. |
 | `CLIPPER_WORKER_CONCURRENCY` | `1` | Worker threads started by `clipper serve` / `clipper worker`. Video jobs are CPU/GPU-heavy; raise carefully. |
+| `CLIPPER_ASR_MODEL` | `auto` | Speech-recognition model. `auto` picks `large-v3-turbo` on an NVIDIA GPU and `small` on CPU. Others: `tiny`, `base`, `small`, `medium`, `large-v3`, `large-v3-turbo` (bigger = more accurate, slower). Downloaded once (75 MB–3 GB) from Hugging Face into `CLIPPER_DATA_DIR/models`. |
+| `CLIPPER_ASR_DEVICE` | `auto` | `auto` uses an NVIDIA GPU if the `gpu` extra is installed and working, else CPU. Force with `cpu` or `cuda`. |
+| `CLIPPER_ASR_CPU_THREADS` | `0` | CPU threads for transcription; `0` = automatic. |
 | `CLIPPER_MAX_UPLOAD_BYTES` | `21474836480` (20 GiB) | Largest accepted upload *(enforced from M2)*. |
 | `CLIPPER_MAX_DURATION_SECONDS` | `14400` (4 h) | Longest accepted video *(enforced from M2)*. |
 | `CLIPPER_TEMP_RETENTION_HOURS` | `24` | Age after which temporary files are swept *(from M2)*. |
+
+**Model download.** The first analysis downloads the speech model from Hugging Face (`huggingface.co`) into
+`CLIPPER_DATA_DIR/models`; afterwards Clipper works offline. Clipper sets `HF_HUB_DISABLE_XET=1` (plain HTTPS)
+because the Xet transfer backend stalled indefinitely in testing; set `HF_HUB_DISABLE_XET=0` to use Xet anyway.
+No video, audio or transcript ever leaves your computer.

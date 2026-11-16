@@ -176,6 +176,7 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def _run_workers(n: int, *, block: bool) -> int:
+    import clipper.ai.analyze
     import clipper.jobs.builtin
     import clipper.media.importer  # noqa: F401
     from clipper.core.services import Services

@@ -244,19 +244,18 @@ def delete_asset(asset_id: str, svc: Svc) -> Response:
     a = _get(svc, asset_id)
     if _locks.get(a.id) and _locks[a.id].locked():
         raise ApiError(409, "UPLOAD_IN_PROGRESS", "An upload is running. Stop it, then delete.")
-    if a.import_job_id:
+    for job_id in filter(None, (a.import_job_id, a.analysis_job_id)):
         with svc.db.session() as s:
-            job = s.get(Job, a.import_job_id)
+            job = s.get(Job, job_id)
             running = job is not None and job.status == JobStatus.RUNNING
+        svc.queue.request_cancel(job_id)  # queued -> cancelled at once; running -> flag the worker acts on
         if running:
-            svc.queue.request_cancel(a.import_job_id)
             raise ApiError(
                 409,
                 "ASSET_BUSY",
-                "This video is being prepared.",
+                "This video is being processed.",
                 "It is being cancelled. Try deleting again in a few seconds.",
             )
-        svc.queue.request_cancel(a.import_job_id)  # queued -> cancelled
     try:
         svc.storage.delete_prefix(asset_prefix(a.project_id, a.id))
     except OSError as e:

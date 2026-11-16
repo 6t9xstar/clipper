@@ -14,10 +14,19 @@ dependencies = [
   "alembic>=1.14,<2",
   "structlog>=24.4",
   "psutil>=6.1",
+  # speech recognition (MIT). faster-whisper 1.2.1 passes an argument removed in PyAV 18 -> pin av<18
+  "faster-whisper==1.2.1",
+  "av>=17,<18",
 ]
 
 [project.optional-dependencies]
 postgres = ["psycopg[binary]>=3.2,<4"]
+# NVIDIA GPU acceleration for transcription (CUDA 12 runtime libraries; Windows/Linux x86-64).
+# cuBLAS capped at 12.9.2.10: 12.9.3.13 has no Windows wheel (checked 2026-11-16).
+gpu = [
+  "nvidia-cublas-cu12>=12.6,<=12.9.2.10; platform_machine == 'x86_64' or platform_machine == 'AMD64'",
+  "nvidia-cudnn-cu12>=9,<10; platform_machine == 'x86_64' or platform_machine == 'AMD64'",
+]
 
 [project.scripts]
 clipper = "clipper.cli:main"
@@ -58,6 +67,10 @@ strict = true
 mypy_path = "backend"
 packages = ["clipper"]
 exclude = ["backend/clipper/migrations/"]
+
+[[tool.mypy.overrides]]
+module = ["ctranslate2", "ctranslate2.*", "faster_whisper", "faster_whisper.*"]
+ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["backend/tests"]

@@ -3,9 +3,10 @@
 **Open-source, local-first AI video clipper** that turns your long videos into short vertical clips with captions —
 on your own computer, without uploading your media anywhere.
 
-> **Status: pre-alpha (milestone M2 of 7).** Backend foundation (M1) and video import (M2: upload, validation,
-> preview proxy, thumbnails, waveform) are done and tested via the API. AI analysis, the web UI, editing and export
-> are **not in the app yet** — they are being built in M3–M5. A working prototype of the clip pipeline lives in `spikes/` (see [docs/benchmarks.md](docs/benchmarks.md)).
+> **Status: pre-alpha (milestone M3 of 7).** Done and tested via the API: backend foundation (M1), video import
+> (M2: upload, validation, preview proxy, thumbnails, waveform) and AI analysis (M3: local speech-to-text, shot-cut
+> detection, explainable clip suggestions you can approve, reject and trim). The web UI, captions, vertical
+> reframing and export are **not in the app yet** (M4–M5); a prototype of them lives in `spikes/`.
 > Do not use this for real work yet.
 
 Use it only with videos you made or have permission to use. See the plan's legal section

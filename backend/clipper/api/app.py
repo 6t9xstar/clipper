@@ -13,6 +13,7 @@ from sqlalchemy import select, text
 
 from clipper import __version__
 from clipper.api import assets as assets_api
+from clipper.api import clips as clips_api
 from clipper.api import errors
 from clipper.api.errors import ApiError
 from clipper.api.schemas import JobCreate, JobOut, Page, ProjectCreate, ProjectOut, ProjectUpdate
@@ -211,4 +212,5 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     app.include_router(api)
     app.include_router(assets_api.router)
+    app.include_router(clips_api.router)
     return app

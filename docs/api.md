@@ -59,6 +59,54 @@ Warnings (video still usable): `NO_AUDIO`, `VARIABLE_FRAME_RATE`, `HDR_COLORS_MA
 | `GET /api/v1/assets/{id}/waveform` | `{"rate": 20, "peaks": [0..255, …]}` — one peak per 50 ms; empty if no audio |
 
 ### Deleting
-`DELETE /api/v1/assets/{id}` removes the database row and **all** files (source, proxy, audio, thumbnails).
-`409 ASSET_BUSY` while an import is running (it is cancelled; retry shortly).
+`DELETE /api/v1/assets/{id}` removes the database row, its transcript and clips, and **all** files.
+`409 ASSET_BUSY` while an import or analysis is running (it is cancelled; retry shortly).
+
+## Finding clips (M3)
+
+### 1. Analyse a `ready` video
+```
+POST /api/v1/assets/{id}/analyze
+{"min_seconds": 15, "max_seconds": 60, "count": 10, "language": null, "retranscribe": false}
+-> 202 job (type ai.analyze)
+```
+All fields are optional (defaults shown). `language` is an ISO code such as `en` or `ur`; empty = detect.
+The job transcribes locally (faster-whisper; the model is downloaded once from Hugging Face on first use, see
+[configuration](configuration.md)), detects shot cuts, and scores candidate moments. Re-running it reuses the
+cached transcript, so trying other lengths takes seconds. `409 ANALYSIS_RUNNING` (with `job_id`) if one is active;
+`409 ASSET_NOT_READY` before import finishes.
+
+The finished job's `result` reports `mode` (`speech`, or `audio` when there is little or no talking), how many
+clips were `suggested`, the detected `language`, and `notes`, for example when fewer good moments were found than
+requested: **Clipper never fills the list with moments it scores as poor.**
+
+### 2. Review suggestions
+`GET /api/v1/assets/{id}/clips[?status=suggested|approved|rejected]` — best first. Each clip has `start_ms`,
+`end_ms`, `score`, `rank`, `title` (opening words), `reasons` (e.g. "strong opening line", "starts mid-thought")
+and the raw `features` behind the score. In speech mode clips always start and end between sentences.
+
+`GET /api/v1/assets/{id}/transcript` — `language`, `model`, `device`, and `words`: `[{"w","s","e","p"}]`
+(text, start/end seconds, confidence).
+
+### 3. Approve, reject, trim — optimistic concurrency
+```
+GET   /api/v1/clips/{id}                      -> ETag: "3"
+PATCH /api/v1/clips/{id}   If-Match: "3"      {"status": "approved", "start_ms": 12000, "end_ms": 41000, "title": "…"}
+```
+`428 PRECONDITION_REQUIRED` without `If-Match`; `412 VERSION_CONFLICT` (with the current `version`) if the clip
+changed since you read it. Bounds: inside the video, 1 s – 10 min (`422 CLIP_OUT_OF_RANGE` / `CLIP_LENGTH`).
+
+Re-analysing replaces only clips that are still plain suggestions; approved, rejected and manual clips are kept
+and new suggestions that mostly overlap them are skipped.
+
+### 4. Manual clips
+`POST /api/v1/assets/{id}/clips {"start_ms", "end_ms", "title"?}` → 201 (`origin: manual`, `status: approved`).
+`DELETE /api/v1/clips/{id}` → 204.
+
+### How suggestions are scored (and limits)
+Heuristic and explainable, not a "virality" predictor: every reason maps to a measurable feature (opening hook,
+question → answer, concrete numbers, filler words, starting mid-thought, ending on a pause, speaking density,
+loudness relative to the rest of the video, shot-cut pace). Keyword features are **English-only**; for other
+languages ranking uses timing, loudness and pace. It does not understand humour, visuals or story. Review the
+suggestions — they are a starting point.
 `DELETE /api/v1/projects/{id}` removes the project, its videos and every file under it.

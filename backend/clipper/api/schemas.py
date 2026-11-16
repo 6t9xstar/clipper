@@ -130,8 +130,60 @@ class AssetOut(BaseModel):
     warnings: list[str]
     media_info: dict[str, Any] | None
     import_job_id: str | None
+    analysis_job_id: str | None
     error_code: str | None
     error_message: str | None
     error_hint: str | None = None
     created_at: float
     upload_url: str | None = None
+
+
+class AnalyzeRequest(BaseModel):
+    min_seconds: float = Field(default=15, ge=3, le=600, description="Shortest suggested clip")
+    max_seconds: float = Field(default=60, ge=5, le=600, description="Longest suggested clip")
+    count: int = Field(default=10, ge=1, le=50, description="How many suggestions to make")
+    language: str | None = Field(
+        default=None, pattern=r"^[a-z]{2,3}$", description="Spoken language; empty = detect"
+    )
+    retranscribe: bool = Field(default=False, description="Ignore the cached transcript")
+
+    @model_validator(mode="after")
+    def _range(self) -> AnalyzeRequest:
+        if self.max_seconds <= self.min_seconds:
+            raise ValueError("max_seconds must be greater than min_seconds")
+        return self
+
+
+class ClipOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: str
+    project_id: str
+    asset_id: str
+    start_ms: int
+    end_ms: int
+    origin: str
+    status: str
+    score: float | None
+    rank: int | None
+    reasons: list[str]
+    features: dict[str, float]
+    title: str | None
+    edit: dict[str, Any]
+    version: int
+    created_at: float
+    updated_at: float
+
+
+class ClipCreate(BaseModel):
+    start_ms: int = Field(ge=0)
+    end_ms: int = Field(gt=0)
+    title: str | None = Field(default=None, max_length=200)
+    _v = field_validator("title")(_clean_name)
+
+
+class ClipUpdate(BaseModel):
+    start_ms: int | None = Field(default=None, ge=0)
+    end_ms: int | None = Field(default=None, gt=0)
+    status: str | None = Field(default=None, pattern=r"^(suggested|approved|rejected)$")
+    title: str | None = Field(default=None, max_length=200)
+    _v = field_validator("title")(_clean_name)

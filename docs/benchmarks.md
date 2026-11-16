@@ -59,5 +59,38 @@ Synthetic 3 h source: 640×360 30 fps H.264 + AAC tone, 1138 MB.
 Notes:
 - The source is 360p, so the proxy is not downscaled; 1080p sources will import slower (decode-bound). To be measured
   with real footage.
-- The in-process benchmark cannot separate the test client's buffering of 64 MiB chunks from the server. A
-  separate-process measurement of the server is pending.
+- The in-process benchmark cannot separate the test client's buffering of 64 MiB chunks from the server; see the
+  separate-process measurement below.
+
+### Server-only memory (`scripts/bench_server_memory.py`, same 3 h file, real `clipper serve` process)
+| Phase | Peak RSS of the whole server process tree (Python + FFmpeg) |
+|---|---|
+| Upload (64 MiB chunks over HTTP) | **96 MB** |
+| Import | **317 MB** |
+
+Upload 18.4 s. The import wall time of this run is **not valid**: the PC went into sleep/hibernation mid-run
+(Windows event 42, "Standby Battery Budget Exceeded"); the earlier 1883 s figure stands. The run's Python-only
+figure (5 MB) was wrong — it measured the Windows venv launcher, not the interpreter; the script is fixed but
+has not been re-run, so no Python-only figure is reported.
+
+# M3 — AI analysis (2026-11-16)
+
+Same machine. All numbers below are from real runs; nothing is estimated.
+
+| Check | Result |
+|---|---|
+| `scripts/smoke_analyze.py` — real `clipper serve` process, 63 s talk video (Windows SAPI text-to-speech over generated visuals, 2 strong + 3 filler paragraphs), real faster-whisper `tiny` | Model ran on **CUDA**; 142 words; analysis job **10.2 s** end to end (incl. model load). Suggested exactly the 2 strong paragraphs, each whole (10.03–27.01 s, 38.15–51.13 s); note "only 2 of 3 requested moments scored well enough" |
+| `test_asr_real.py` (`CLIPPER_TEST_ASR=1`, `tiny`, CPU) | 2 passed: expected words found, timestamps ordered, cancellation stops decoding |
+| Scene cuts (`scdet`, threshold 12, proxy at 10 fps/160 px) | Exact on synthetic hard cuts (±0.1 s). **Missed** a red→green cut: both colours have the same luma (≈81), and scdet did not react to the chroma change. Real cuts nearly always change brightness, but this is a known blind spot |
+| Hugging Face model download | Hung at 0 bytes for >10 min through `hf_xet`; plain HTTPS fetched the same 75 MB in 5.7 s. Fixed by defaulting to HTTPS |
+
+Scorer issues found by the smoke test on a real transcript and fixed (with regression tests):
+1. A clip could stop mid-paragraph: "ends on a complete point" only checked for a trailing question mark, so a cut-off
+   clip tied with the whole paragraph and won as the shorter one. Now it requires a ≥ 1 s pause afterwards.
+2. The requested count was filled with negative-score (filler) moments. Now only positive scores are suggested.
+3. Audio mode normalised loudness to the 95th percentile, so a short loud burst in a long calm video scored zero;
+   it also preferred windows that cut the burst off. Now: 99th percentile and a "cut off mid-action" penalty.
+
+Not yet measured: transcription speed of the in-app job on a long real podcast (M0 figures above remain the
+reference: CPU `small` ≈ 0.16× real time, GPU `large-v3-turbo` ≈ 0.05× real time); suggestion quality on real
+podcasts/gameplay with human ratings (planned before v0.1 with user-supplied, permitted footage).

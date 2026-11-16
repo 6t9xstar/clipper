@@ -1,4 +1,4 @@
-# Architecture — as implemented (M2)
+# Architecture — as implemented (M3)
 
 Target architecture: [PHASE1_PLAN.md §6](PHASE1_PLAN.md). This page describes only what exists in code today.
 
@@ -47,6 +47,19 @@ Input errors (`MediaError`) are never retried and free the uploaded bytes; tool/
 If an import job dies without updating its video (worker lost on last attempt, cancel), the API reconciles the
 video to `failed` on the next read. A housekeeping thread (startup + hourly) expires abandoned uploads.
 
+## AI analysis (M3)
+```
+POST analyze -> job ai.analyze (backend/clipper/ai):
+  transcript  asr.py      faster-whisper, word timestamps, VAD; GPU (large-v3-turbo) else CPU (small);
+                          GPU load failure falls back to CPU and is noted   -> derived/transcript.json + transcripts row
+  shot cuts   scenes.py   FFmpeg scdet on the proxy (10 fps, 160 px)        -> derived/scenes.json
+  scoring     highlights.py  pure functions: sentences -> candidate runs -> features -> non-overlapping top-K
+  clips       replace origin=ai/status=suggested rows; keep approved/rejected/manual
+```
+Each step is cached, so a retry or re-analysis does not transcribe again. Model files are cached in
+`data/models` (Hugging Face layout). Known limits: scdet misses gradual transitions and cuts between shots of
+equal brightness; keyword features are English-only.
+
 ## Not yet implemented
-Per-install API token (planned with the web UI in M4), AI pipeline (M3),
+Per-install API token (planned with the web UI in M4), transcript editing,
 editor/UI (M4), rendering (M5), multi-user auth and PostgreSQL support (v1.0).

@@ -35,6 +35,14 @@ class Settings(BaseSettings):
     max_duration_seconds: int = Field(default=4 * 3600, gt=0)
     temp_retention_hours: int = Field(default=24, ge=1)
 
+    # AI analysis
+    asr_model: str = Field(
+        default="auto",
+        description="Whisper model: auto | tiny | base | small | medium | large-v3 | large-v3-turbo",
+    )
+    asr_device: Literal["auto", "cpu", "cuda"] = "auto"
+    asr_cpu_threads: int = Field(default=0, ge=0, le=256, description="0 = automatic")
+
     @field_validator("data_dir")
     @classmethod
     def _abs(cls, v: Path) -> Path:
@@ -43,6 +51,10 @@ class Settings(BaseSettings):
     @property
     def db_url(self) -> str:
         return self.database_url or f"sqlite:///{(self.data_dir / 'clipper.db').as_posix()}"
+
+    @property
+    def models_dir(self) -> Path:
+        return self.data_dir / "models"
 
     @property
     def is_sqlite(self) -> bool:
