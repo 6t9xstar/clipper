@@ -56,7 +56,12 @@ jobs:
           uvx pip-audit -r requirements.txt --progress-spinner off
 
   web:
-    runs-on: ubuntu-latest
+    # UI checks, then the Playwright flows (incl. import -> speech recognition -> export) on all three OSes
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
     defaults:
       run:
         working-directory: frontend
@@ -68,7 +73,14 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
       - uses: astral-sh/setup-uv@v6
-      - run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - name: Install FFmpeg (and a text-to-speech engine on Linux; Windows/macOS have one built in)
+        shell: bash
+        run: |
+          case "$RUNNER_OS" in
+            Linux)   sudo apt-get update && sudo apt-get install -y ffmpeg espeak-ng ;;
+            macOS)   brew install ffmpeg ;;
+            Windows) choco install ffmpeg -y --no-progress ;;
+          esac
       - run: npm ci
       - run: npm run lint
       - run: npm run typecheck
@@ -76,15 +88,17 @@ jobs:
       - run: npm run build
       - run: uv sync --locked
         working-directory: .
-      # uses the Google Chrome preinstalled on GitHub's Ubuntu images (no Playwright browser download)
+      # uses the Google Chrome preinstalled on GitHub's images (no Playwright browser download); the speech
+      # test downloads the "tiny" recognition model (~75 MB) from Hugging Face
       - run: npm run e2e
         env:
           CLIPPER_E2E_CHANNEL: chrome
-      - if: failure()
+      - if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-report
+          name: playwright-${{ matrix.os }}
           path: |
             frontend/playwright-report
-            frontend/test-results
+            frontend/test-results/*.png
+            frontend/test-results/**/trace.zip
           retention-days: 7

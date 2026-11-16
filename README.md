@@ -3,11 +3,12 @@
 **Open-source, local-first AI video clipper** that turns your long videos into short vertical clips with captions —
 on your own computer, without uploading your media anywhere.
 
-> **Status: pre-alpha (milestone M4 of 7).** Done and tested: backend foundation (M1), video import (M2: upload,
-> validation, preview proxy, thumbnails, waveform), AI analysis (M3: local speech-to-text, shot-cut detection,
-> explainable clip suggestions) and a local web editor (M4: clip gallery, trimming, transcript corrections,
-> caption styles, 9:16 framing with a live preview). **Rendering/exporting the finished vertical video is not in
-> the app yet** (M5); the preview only approximates the final caption fonts. Do not use this for real work yet.
+> **Status: pre-alpha (milestone M5 of 7).** Done and tested locally: backend foundation (M1), video import (M2:
+> upload, validation, preview proxy, thumbnails, waveform), AI analysis (M3: local speech-to-text, shot-cut
+> detection, explainable clip suggestions), a local web editor (M4: clip gallery, trimming, transcript corrections,
+> caption styles, 9:16 framing with a live preview) and export (M5: vertical MP4 with burned-in captions, loudness
+> normalisation, SRT/VTT, verification). Tested end to end on Windows only so far; cross-platform CI has not run
+> yet. Framing is a fixed crop (no face tracking). Expect rough edges.
 
 Use it only with videos you made or have permission to use. See the plan's legal section
 ([docs/PHASE1_PLAN.md §3](docs/PHASE1_PLAN.md)). Clipper never promises views or monetization.
@@ -56,6 +57,7 @@ uv run mypy
 uv run pytest -q
 cd frontend && npm run lint && npm run typecheck && npm test && npm run build
 npm run e2e             # Playwright against a real server; uses your installed Edge (CLIPPER_E2E_CHANNEL=chrome for Chrome)
+                        # includes import -> analyse -> export with OS text-to-speech audio (see CONTRIBUTING)
 ```
 
 ## Documentation

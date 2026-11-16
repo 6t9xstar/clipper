@@ -29,6 +29,7 @@ export default defineConfig({
         port: 5173,
         strictPort: true,
         proxy: {
+            "/fonts": backend,
             "/api": {
                 target: backend,
                 changeOrigin: true,

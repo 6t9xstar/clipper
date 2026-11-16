@@ -1,4 +1,4 @@
-# Architecture — as implemented (M4)
+# Architecture — as implemented (M5)
 
 Target architecture: [PHASE1_PLAN.md §6](PHASE1_PLAN.md). This page describes only what exists in code today.
 
@@ -72,12 +72,41 @@ clipper serve: /api/*  -> API (token required)
   `X-Clipper-Token` header or the `clipper_token` cookie (`HttpOnly`, `SameSite=Strict`), compared in constant time.
 - **Preview = export:** caption grouping and line-breaking run only on the server (`edit/captions.py`); the UI
   draws the groups it receives. The 9:16 crop maths exists twice (`edit/framing.py`, `frontend/src/lib/framing.ts`)
-  and both are checked against the same vectors in `testdata/framing_cases.json`. Font metrics in the preview
-  are approximate until the renderer (M5) calibrates them.
+  and both are checked against the same vectors in `testdata/framing_cases.json`. Since M5 the preview uses the
+  bundled fonts and the renderer's line metrics (see below).
 - **Concurrency:** clips and transcripts carry a `version`; writes use `If-Match` and an atomic compare-and-swap
   `UPDATE … WHERE version = ?`. The editor keeps unsaved changes and offers "load the latest version" on `412`.
 - Tests: `backend/tests/test_edit.py`, `frontend/src/lib/lib.test.ts` (Vitest), `frontend/e2e/` (Playwright
   against a real server with a generated video).
 
+## Render and export (M5)
+```
+POST /clips/{id}/exports -> settings snapshot (+ sha256) -> Export row + job "render.export"
+render.export: ASS script + font copied to <export>/work
+            -> loudnorm measure -> AudioPlan (linear gain | gain + capped limiter, refined with ebur128)
+            -> ffmpeg: -ss/-t before -i, crop|fit -> scale(bt709) -> fps -> ass(fontsdir) ; audio plan
+               libx264 crf + maxrate, AAC 48 kHz, -progress pipe:1 -> job progress
+            -> verify (ffprobe + ebur128) -> clip.mp4 / clip.srt / clip.vtt / clip.json -> done
+```
+- Code: `render/graph.py` (filter graphs, qualities, audio policy, parsers), `render/ass.py` (ASS script),
+  `render/subs.py` (SRT/VTT), `render/fontinfo.py` (reads TrueType tables: metrics, cmap, advance widths),
+  `render/export.py` (the job), `api/exports.py`.
+- **Fonts:** Montserrat (Black/ExtraBold/Bold) and Anton, SIL OFL, in `render/fonts/`; served to the UI at `/fonts`
+  as `@font-face` families so the preview and the video use the same files.
+- **Layout parity:** libass sizes a font so winAscent+winDescent = the ASS size, while CSS uses the em square.
+  Presets are defined as CSS px on the 1080×1920 frame; the ASS size is `size / css_scale` and every line is its own
+  event placed with `n5\pos` at the same centre the preview uses, with a baseline correction for the two
+  metric sets. Lines that would be wider than the frame minus margins are scaled down (`fit`, from the font's
+  advance widths) identically in both. A test renders each preset with FFmpeg and compares the glyph rows with the
+  maths the browser uses (≤ 3 px).
+- **Paths in the filter graph:** FFmpeg runs with `cwd` = the work folder and refers to `captions.ass` and `fonts`
+  by relative name, so no user path is ever escaped into a filter string.
+- **Storage:** `projects/{p}/assets/{a}/exports/{e}/`; the temporary `work/` folder is removed after the job.
+  A crashed render is retried by the queue (lease expiry); a cancelled one kills FFmpeg's process tree.
+- Tests: `backend/tests/test_render.py` (unit, golden end-to-end renders on generated media, API rules),
+  `frontend/e2e/editor.spec.ts` (export + download), `frontend/e2e/speech.spec.ts` (full flow with real speech
+  recognition on OS text-to-speech audio).
+
 ## Not yet implemented
-Rendering/export (M5), face-following framing, multi-user auth and PostgreSQL support (v1.0).
+Face-following / animated framing (crop is static per clip), hardware encoders (NVENC/QSV/VideoToolbox),
+per-platform metadata, batch export, multi-user auth and PostgreSQL support (v1.0).

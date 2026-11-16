@@ -94,3 +94,36 @@ Scorer issues found by the smoke test on a real transcript and fixed (with regre
 Not yet measured: transcription speed of the in-app job on a long real podcast (M0 figures above remain the
 reference: CPU `small` ≈ 0.16× real time, GPU `large-v3-turbo` ≈ 0.05× real time); suggestion quality on real
 podcasts/gameplay with human ratings (planned before v0.1 with user-supplied, permitted footage).
+
+# M5 — Render & export (2026-11-16)
+Machine: Intel i7-12800H (14 cores), 32 GB RAM, Windows 11, FFmpeg 8.1, CPU encoding (libx264). Source generated
+by `scripts/bench_render.py`: 1920×1080 30 fps moving test pattern with temporal film-grain noise (so it is not
+unrealistically easy to compress) and a tone. 45 s clip, 9:16 crop, burned-in "bold" captions every 0.35 s.
+No third-party media.
+
+| Grain | Quality | Render | Speed | Output | Loudness |
+|---|---|---|---|---|---|
+| 6 (≈ camera footage) | standard (1080×1920, crf 20, veryfast) | 18.1 s | 2.48× real time | 49.9 MB | −13.9 LUFS |
+| 6 | high (crf 17, medium) | 66.9 s | 0.67× | 122.1 MB | |
+| 18 (heavy grain) | standard | 32.2 s | 1.40× | 91.8 MB | |
+| 18 | high | 90.6 s | 0.50× | 138.5 MB | |
+
+Draft (720×1280, ultrafast) at grain 6: 15.0 s (2.99×); "fit" framing (blurred background) standard: 19.6 s
+(2.29×) — both measured before the bitrate caps were added. The loudness pass adds ≈ 0.6 s and verification
+≈ 0.2 s per 45 s clip. Before the bitrate caps, heavy grain at `standard` produced 330 MB for 45 s; the caps
+(16 / 24 / 6 Mbit/s) bound the size at a small quality cost on very noisy footage.
+
+Reproduce: `uv run python scripts/bench_render.py --seconds 45 --quality standard --grain 6 --workdir data`.
+
+**Preview ↔ export caption parity (plan P5, AC ≤ 2 % of frame):** for every preset, `test_render.py` renders a
+caption with FFmpeg/libass and compares the rows of actual glyph ink with the positions the browser maths
+predicts: within 3 px of 1920 (0.16 %). Checked once in a real browser as well: the burned-in "THREE WEEKS?" line
+spans rows 1141–1237 and columns 238–839; the preview draws it at 1141.6–1237.8 and 238–842.
+
+**Loudness on real speech:** OS text-to-speech (Windows SAPI) audio is quiet with sharp peaks; the first version
+(loudnorm only) left it at −17 LUFS and failed verification. Gain alone cannot reach −14 LUFS without exceeding
+the true-peak limit, so the export now applies at most 8 dB of limiting: it lands at −16.3 LUFS within the
+true-peak limit and reports that as a loudness note instead of over-compressing.
+
+Not yet measured: hardware encoders (not implemented), macOS/Linux render speeds, long (10 min) clips, real
+camera footage.

@@ -290,7 +290,18 @@ def update_clip(
 
 @router.delete("/clips/{clip_id}", status_code=204)
 def delete_clip(clip_id: str, svc: Svc) -> Response:
+    from clipper.api.exports import stop_exports
+    from clipper.db.models import Export
+    from clipper.render.export import export_prefix
+
     c = _load(svc, clip_id)
+    if stop_exports(svc, clip_id=c.id):
+        raise ApiError(409, "CLIP_BUSY", "This clip is being exported.",
+                       "The export is being cancelled. Try deleting again in a few seconds.")  # fmt: skip
+    with svc.db.session() as s:
+        export_ids = list(s.scalars(select(Export.id).where(Export.clip_id == c.id)))
+    for eid in export_ids:  # the rows go with the clip (FK cascade); the files must go too
+        svc.storage.delete_prefix(export_prefix(c.project_id, c.asset_id, eid))
     with svc.db.session() as s:
         row = s.get(Clip, c.id)
         if row is not None:

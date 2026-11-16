@@ -136,6 +136,46 @@ class Clip(Base):
     updated_at: Mapped[float] = mapped_column(Float, default=time.time, onupdate=time.time)
 
 
+class ExportStatus(enum.StrEnum):
+    QUEUED = "queued"
+    RENDERING = "rendering"
+    DONE = "done"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+
+
+class Export(Base):
+    """One rendered video of a clip (job history). Files live under the asset's `exports/{id}/` folder, so
+    deleting the video or project removes them too. `settings` is the exact edit that was rendered."""
+
+    __tablename__ = "exports"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=new_id)
+    project_id: Mapped[str] = mapped_column(
+        String(32), ForeignKey("projects.id", ondelete="CASCADE"), index=True
+    )
+    asset_id: Mapped[str] = mapped_column(String(32), ForeignKey("assets.id", ondelete="CASCADE"), index=True)
+    clip_id: Mapped[str] = mapped_column(String(32), ForeignKey("clips.id", ondelete="CASCADE"), index=True)
+    quality: Mapped[str] = mapped_column(String(16))
+    status: Mapped[str] = mapped_column(String(16), default=ExportStatus.QUEUED)
+    job_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    clip_version: Mapped[int] = mapped_column(Integer)
+    settings: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    settings_hash: Mapped[str] = mapped_column(String(64))
+    title: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    files: Mapped[dict[str, int]] = mapped_column(JSON, default=dict)  # kind -> size in bytes
+    duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    width: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    height: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    fps: Mapped[float | None] = mapped_column(Float, nullable=True)
+    loudness_lufs: Mapped[float | None] = mapped_column(Float, nullable=True)
+    checks: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)  # verification results
+    error_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    error_message: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    created_at: Mapped[float] = mapped_column(Float, default=time.time)
+    finished_at: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+
 class Job(Base):
     """A unit of background work. The table *is* the queue (see clipper.jobs.queue)."""
 

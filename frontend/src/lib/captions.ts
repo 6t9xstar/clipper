@@ -21,7 +21,8 @@ export function isSpoken(w: Word, t: number): boolean {
 }
 
 /** Preset sizes are pixels in the 1080x1920 output; scale them to a preview frame of height `frameH`.
- *  This is an approximation until M5 calibrates browser font metrics against the burned-in render. */
+ *  The preview uses the same font files as the render, and the server converts sizes for libass, so glyphs
+ *  match (checked in backend tests/test_render.py); only anti-aliasing and the outline shape differ. */
 export function px(v: number, frameH: number): number {
     return (v * frameH) / FRAME_H;
 }
@@ -38,6 +39,7 @@ export function textShadow(p: Preset, frameH: number): string | undefined {
             );
         }
     }
-    if (p.shadow > 0) parts.push(`0 ${px(p.shadow, frameH)}px ${px(p.shadow * 2, frameH)}px rgba(0,0,0,0.8)`);
+    // libass draws a hard (unblurred) copy shifted down, in black at 80 %
+    if (p.shadow > 0) parts.push(`0 ${px(p.shadow, frameH)}px 0 rgba(0,0,0,0.8)`);
     return parts.length ? parts.join(", ") : undefined;
 }

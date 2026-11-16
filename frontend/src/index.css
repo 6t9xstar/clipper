@@ -1,5 +1,31 @@
 @import "tailwindcss";
 
+/* Caption fonts (SIL OFL 1.1), served by `clipper serve` from backend/clipper/render/fonts: the preview uses
+   the same font files as the burned-in render. Family names match Preset.css_family on the server. */
+@font-face {
+    font-family: "Clipper Montserrat Black";
+    src: url("/fonts/Montserrat-Black.ttf") format("truetype");
+    font-display: block;
+}
+
+@font-face {
+    font-family: "Clipper Montserrat ExtraBold";
+    src: url("/fonts/Montserrat-ExtraBold.ttf") format("truetype");
+    font-display: block;
+}
+
+@font-face {
+    font-family: "Clipper Montserrat Bold";
+    src: url("/fonts/Montserrat-Bold.ttf") format("truetype");
+    font-display: block;
+}
+
+@font-face {
+    font-family: "Clipper Anton Regular";
+    src: url("/fonts/Anton-Regular.ttf") format("truetype");
+    font-display: block;
+}
+
 :root {
     color-scheme: dark;
 }

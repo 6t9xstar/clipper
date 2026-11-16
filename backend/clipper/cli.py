@@ -62,9 +62,10 @@ def doctor() -> dict[str, Any]:
         except (OSError, subprocess.TimeoutExpired):
             enc = filt = ""
         missing = [n for n in ("libx264", "aac") if f" {n} " not in enc]
-        missing += [f"filter:{n}" for n in ("tile", "scale", "ass") if f" {n} " not in filt]
+        need = ("tile", "scale", "scdet", "ass", "gblur", "loudnorm", "alimiter", "ebur128")
+        missing += [f"filter:{n}" for n in need if f" {n} " not in filt]
         add("ffmpeg_features", "fail" if missing else "ok",
-            "missing: " + ", ".join(missing) if missing else "libx264, aac, tile, scale, ass available",
+            "missing: " + ", ".join(missing) if missing else "libx264, aac and the needed filters available",
             "Install a full FFmpeg build (e.g. Gyan.FFmpeg on Windows, distro ffmpeg on Linux).")  # fmt: skip
     try:
         s.data_dir.mkdir(parents=True, exist_ok=True)
@@ -178,7 +179,8 @@ def main(argv: list[str] | None = None) -> int:
 def _run_workers(n: int, *, block: bool) -> int:
     import clipper.ai.analyze
     import clipper.jobs.builtin
-    import clipper.media.importer  # noqa: F401
+    import clipper.media.importer
+    import clipper.render.export  # noqa: F401
     from clipper.core.services import Services
     from clipper.jobs.worker import Worker
     from clipper.maintenance import sweep

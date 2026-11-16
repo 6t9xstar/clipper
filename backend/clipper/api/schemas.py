@@ -215,3 +215,34 @@ class WordEdit(BaseModel):
 
 class TranscriptEdit(BaseModel):
     words: list[WordEdit] = Field(min_length=1, max_length=2000)
+
+
+class ExportCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    quality: str = Field(default="standard", pattern=r"^(standard|high|draft)$")
+
+
+class ExportOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: str
+    project_id: str
+    asset_id: str
+    clip_id: str
+    quality: str
+    status: str
+    job_id: str | None
+    clip_version: int
+    title: str | None
+    files: dict[str, int]
+    duration_ms: int | None
+    width: int | None
+    height: int | None
+    fps: float | None
+    loudness_lufs: float | None
+    checks: dict[str, Any]
+    error_code: str | None
+    error_message: str | None
+    created_at: float
+    finished_at: float | None
+    progress: float | None = None
+    progress_message: str | None = None

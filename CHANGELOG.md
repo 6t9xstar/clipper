@@ -4,6 +4,16 @@ versioning: [SemVer](https://semver.org/).
 
 ## [Unreleased]
 ### Added
+- M5 render & export: `POST /clips/{id}/exports` renders the saved clip to a 9:16 MP4 (H.264/AAC, burned-in
+  captions via libass, crop or blurred-background fit) in three qualities, plus SRT/VTT caption files and a
+  `clip.json` manifest. Settings are frozen per export (with a hash; duplicate requests reuse the running export).
+  Loudness targets −14 LUFS / −1.5 dBTP with capped limiting and an honest note when a clip stays quieter. Every
+  file is verified (codec, size, duration ±1 frame, audio, loudness) before it is marked done. Progress, cancel,
+  delete, download with a readable file name, and export history on the project page.
+- Bundled OFL fonts (Montserrat, Anton) used by both the preview and the renderer; preview caption layout now
+  matches the export (tested within 3 px on a 1080×1920 frame).
+- `scripts/bench_render.py`; Playwright export/download test and a full speech flow test (OS text-to-speech →
+  transcription → edit → export); CI runs the Playwright suite on Linux, Windows and macOS.
 - M4 web editor (`frontend/`, served by `clipper serve`): projects, resumable import with rights confirmation,
   analysis with progress/cancel, clip gallery (approve/reject/delete, manual clips), and a clip editor with
   waveform trimming (drag, keyboard, snap to words, loop), transcript word corrections, four caption styles with

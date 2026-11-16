@@ -52,6 +52,10 @@ class JobContext:
         self._progress = (fraction, message)  # flushed by the heartbeat thread; cheap to call often
         self.check_cancel()
 
+    def report(self, fraction: float, message: str | None = None) -> None:
+        """Like progress() but never raises: safe from tool-output reader threads."""
+        self._progress = (fraction, message)
+
 
 Handler = Callable[[JobContext], dict[str, Any] | None]
 HANDLERS: dict[str, Handler] = {}

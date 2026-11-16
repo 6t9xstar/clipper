@@ -244,6 +244,11 @@ def delete_asset(asset_id: str, svc: Svc) -> Response:
     a = _get(svc, asset_id)
     if _locks.get(a.id) and _locks[a.id].locked():
         raise ApiError(409, "UPLOAD_IN_PROGRESS", "An upload is running. Stop it, then delete.")
+    from clipper.api.exports import stop_exports
+
+    if stop_exports(svc, asset_id=a.id):
+        raise ApiError(409, "ASSET_BUSY", "A clip of this video is being exported.",
+                       "The export is being cancelled. Try deleting again in a few seconds.")  # fmt: skip
     for job_id in filter(None, (a.import_job_id, a.analysis_job_id)):
         with svc.db.session() as s:
             job = s.get(Job, job_id)

@@ -16,7 +16,13 @@ cd frontend && npm run format && npm run lint && npm run typecheck && npm test &
 npm run e2e   # Playwright; uses installed Edge (set CLIPPER_E2E_CHANNEL=chrome for Chrome)
 ```
 CI runs the Python checks on Linux, Windows and macOS with Python 3.12 and 3.13, and the web checks plus the
-Playwright flows on Linux with Chrome.
+Playwright flows on Linux, Windows and macOS with Chrome.
+
+The Playwright suite generates its own media. The speech test makes a narrated video with the operating system's
+text-to-speech (Windows SAPI, macOS `say`, Linux `espeak-ng`) and skips itself if none is available. Its first
+run downloads the `tiny` speech model (~75 MB); set `CLIPPER_E2E_MODELS=<folder>` to copy an existing models
+folder (e.g. `data/models`) instead. Backend tests write temporary files; if your system drive is short on space,
+add `--basetemp=<folder on another drive>` to `pytest`.
 
 ## Rules
 - **Schema changes need an Alembic migration** in `backend/clipper/migrations/versions/` (a test enforces it).

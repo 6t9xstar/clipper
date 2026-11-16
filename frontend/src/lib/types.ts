@@ -121,8 +121,10 @@ export interface Preset {
     id: string;
     name: string;
     description: string;
+    font_file: string;
+    /** CSS family declared in index.css for the bundled font file */
     font_family: string;
-    font_weight: number;
+    /** em size in px of the 1080x1920 frame */
     size: number;
     uppercase: boolean;
     color: string;
@@ -131,6 +133,11 @@ export interface Preset {
     outline_color: string;
     shadow: number;
     box: string | null;
+    box_padding: number;
+    /** distance between line centres, in em */
+    line_height: number;
+    /** height of the box libass draws around a line, in em */
+    font_box: number;
     max_words: number;
     max_chars_per_line: number;
     max_lines: number;
@@ -141,6 +148,8 @@ export interface CaptionGroup {
     s: number;
     e: number;
     lines: Word[][];
+    /** per line: scale (<= 1) that keeps it inside the frame; the render applies the same */
+    fit: number[];
 }
 
 export interface Captions {
@@ -156,3 +165,44 @@ export const RIGHTS: { value: string; label: string }[] = [
     { value: "public_domain_or_cc", label: "Public domain / Creative Commons (licence allows edits)" },
     { value: "other", label: "Other (explain)" },
 ];
+
+export type ExportStatus = "queued" | "rendering" | "done" | "failed" | "cancelled";
+
+export interface ExportCheck {
+    ok: boolean;
+    value: unknown;
+    [k: string]: unknown;
+}
+
+export interface Export {
+    id: string;
+    project_id: string;
+    asset_id: string;
+    clip_id: string;
+    quality: string;
+    status: ExportStatus;
+    job_id: string | null;
+    clip_version: number;
+    title: string | null;
+    files: Partial<Record<"mp4" | "srt" | "vtt" | "json", number>>;
+    duration_ms: number | null;
+    width: number | null;
+    height: number | null;
+    fps: number | null;
+    loudness_lufs: number | null;
+    checks: Record<string, ExportCheck>;
+    error_code: string | null;
+    error_message: string | null;
+    created_at: number;
+    finished_at: number | null;
+    progress: number | null;
+    progress_message: string | null;
+}
+
+export interface Quality {
+    id: string;
+    name: string;
+    description: string;
+    width: number;
+    height: number;
+}

@@ -2,6 +2,7 @@
 // and the optimistic-concurrency conflict path. AI analysis is not exercised here (it needs a speech model
 // and real speech); its API is covered by backend tests.
 import { expect, test, type Page } from "@playwright/test";
+import { statSync } from "node:fs";
 import { resolve } from "node:path";
 
 const VIDEO = resolve(import.meta.dirname, "..", "test-results", "e2e-data", "pattern.mp4");
@@ -88,13 +89,35 @@ test("import, make a clip, edit it and the edits persist", async ({ page }) => {
     expect(box).not.toBeNull();
     expect(Math.abs(box!.width / box!.height - 9 / 16)).toBeLessThan(0.01);
     await page.screenshot({ path: "test-results/editor.png", fullPage: true }); // for human review
+
+    // export (draft quality: fastest), wait for the verified file, download it
+    const panel = page.getByRole("region", { name: "Export" });
+    await panel.getByRole("radio", { name: "Draft 720p" }).click();
+    await panel.getByRole("button", { name: "Export video" }).click();
+    const row = panel.getByTestId("export-row").first();
+    await expect(row.getByText("done", { exact: true })).toBeVisible({ timeout: 60_000 });
+    await expect(row.getByTestId("export-facts")).toContainText("720×1280");
+    await expect(row.getByTestId("export-facts")).toContainText("LUFS");
+    const [dl] = await Promise.all([
+        page.waitForEvent("download"),
+        row.getByRole("link", { name: "Download MP4" }).click(),
+    ]);
+    expect(dl.suggestedFilename()).toMatch(/^pattern-test-clip-[0-9a-f]{6}\.mp4$/);
+    const { size } = statSync((await dl.path())!);
+    expect(size).toBeGreaterThan(20_000);
+    // editing again makes the export "from an earlier version" and blocks a new export until saved
+    await page.getByLabel("Title (for your own reference)").fill("Pattern test clip v2");
+    await expect(panel.getByRole("button", { name: "Export video" })).toBeDisabled();
+    await page.getByRole("button", { name: "Save changes" }).click();
+    await expect(row.getByText("made from an earlier version of this clip")).toBeVisible();
+    await page.screenshot({ path: "test-results/export.png", fullPage: true });
 });
 
 test("a change made elsewhere is not overwritten", async ({ page }) => {
     test.skip(!clipUrl, "needs the clip from the previous test");
     await page.goto(clipUrl);
     const title = page.getByLabel("Title (for your own reference)");
-    await expect(title).toHaveValue("Pattern test clip");
+    await expect(title).toHaveValue("Pattern test clip v2");
 
     // another tab saves first (same cookie, so the API accepts it)
     const id = clipUrl.split("/").pop()!;

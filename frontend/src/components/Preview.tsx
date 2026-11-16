@@ -118,42 +118,54 @@ export function Preview({
                 style={{ left: box.left, top: box.top, width: box.width, height: box.height }}
             />
             {g && pr && (
+                // Same layout as the renderer (backend clipper/render/ass.py): lines are line_height em
+                // apart, centred on the caption position, never re-wrapped, scaled by the server's `fit`.
                 <div
                     className="pointer-events-none absolute right-0 left-0 flex flex-col items-center text-center"
-                    style={{
-                        top: `${pos * 100}%`,
-                        transform: "translateY(-50%)",
-                        padding: `0 ${px(60, height)}px`,
-                    }}
+                    style={{ top: `${pos * 100}%`, transform: "translateY(-50%)" }}
                     data-testid="caption"
                 >
                     {g.lines.map((line, i) => (
                         <div
                             key={i}
+                            className="flex items-center justify-center whitespace-nowrap"
                             style={{
+                                height: px(pr.size * pr.line_height, height),
                                 fontFamily: pr.font_family,
-                                fontWeight: pr.font_weight,
                                 fontSize: px(pr.size, height),
-                                lineHeight: 1.15,
+                                lineHeight: 1,
                                 color: pr.color,
-                                textShadow: textShadow(pr, height),
+                                textShadow: pr.box ? undefined : textShadow(pr, height),
                                 textTransform: pr.uppercase ? "uppercase" : "none",
-                                background: pr.box ? hexa(pr.box) : undefined,
-                                padding: pr.box ? `${px(6, height)}px ${px(18, height)}px` : undefined,
-                                borderRadius: pr.box ? px(14, height) : undefined,
+                                transform: (g.fit?.[i] ?? 1) < 1 ? `scale(${g.fit[i]})` : undefined,
                             }}
                         >
-                            {line.map((w, k) => (
-                                <span
-                                    key={k}
-                                    style={
-                                        pr.highlight && isSpoken(w, t) ? { color: pr.highlight } : undefined
-                                    }
-                                >
-                                    {k > 0 ? " " : ""}
-                                    {w.w}
-                                </span>
-                            ))}
+                            <span
+                                style={
+                                    pr.box
+                                        ? {
+                                              display: "inline-block",
+                                              lineHeight: pr.font_box,
+                                              padding: px(pr.box_padding, height),
+                                              background: hexa(pr.box),
+                                          }
+                                        : undefined
+                                }
+                            >
+                                {line.map((w, k) => (
+                                    <span
+                                        key={k}
+                                        style={
+                                            pr.highlight && isSpoken(w, t)
+                                                ? { color: pr.highlight }
+                                                : undefined
+                                        }
+                                    >
+                                        {k > 0 ? " " : ""}
+                                        {w.w}
+                                    </span>
+                                ))}
+                            </span>
                         </div>
                     ))}
                 </div>

@@ -15,6 +15,7 @@ from clipper import __version__
 from clipper.api import assets as assets_api
 from clipper.api import clips as clips_api
 from clipper.api import errors, web
+from clipper.api import exports as exports_api
 from clipper.api.errors import ApiError
 from clipper.api.schemas import JobCreate, JobOut, Page, ProjectCreate, ProjectOut, ProjectUpdate
 from clipper.api.security import LocalGuardMiddleware
@@ -215,5 +216,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(api)
     app.include_router(assets_api.router)
     app.include_router(clips_api.router)
+    app.include_router(exports_api.router)
     web.install(app, app.state.token)  # last: its catch-all route must not shadow the API
     return app

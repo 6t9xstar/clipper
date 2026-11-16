@@ -1,6 +1,7 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router";
+import { ExportPanel } from "../components/ExportPanel";
 import { Preview } from "../components/Preview";
 import { Timeline } from "../components/Timeline";
 import { TranscriptPanel } from "../components/TranscriptPanel";
@@ -285,8 +286,8 @@ function EditorBody({ clip, asset }: { clip: Clip; asset: Asset }) {
                         </label>
                     </div>
                     <p className="max-w-[315px] text-center text-xs text-neutral-500">
-                        Preview approximates fonts; the exported video is authoritative. Drag the picture to
-                        reframe.
+                        Same fonts and caption layout as the export (only edge smoothing differs). Drag the
+                        picture to reframe.
                     </p>
                 </div>
 
@@ -539,6 +540,8 @@ function EditorBody({ clip, asset }: { clip: Clip; asset: Asset }) {
                             onChange={(e) => setDraft({ ...draft, title: e.target.value })}
                         />
                     </Field>
+
+                    <ExportPanel clip={clip} dirty={dirty} />
                 </div>
             </div>
         </div>

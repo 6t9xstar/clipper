@@ -512,3 +512,16 @@ Local-first; no telemetry by default; data deletion = hard delete of DB rows + f
 - Caption line-breaking is server-side only; the preview draws server-provided groups. Preview font metrics are
   approximate until the renderer calibrates them in M5.
 - Playwright runs against installed Edge/Chrome channels (no browser download).
+
+## 17. Revisions during M5 (2026-11-16)
+- Export **quality presets** (standard / high / draft) instead of per-platform presets: every short-video platform
+  takes 1080×1920 H.264/AAC; platform metadata and checklists stay in v1.0.
+- Caption fonts are **Montserrat** (Black/ExtraBold/Bold) and **Anton** (SIL OFL), bundled and shared by preview
+  and renderer. Preview ↔ export parity is achieved by layout maths from the font tables (P5 AC met: ≤ 3 px).
+- **Loudness:** two-pass measurement, then linear gain or gain + oversampled limiter capped at 8 dB of limiting,
+  refined with ebur128. A clip that cannot reach −14 LUFS without heavier compression is exported quieter with a
+  visible note; the loudness check is reported, not fatal.
+- **Static framing only** (one crop per clip). The `sendcmd` crop path from P2 arrives with face tracking (v1.0).
+- **No hardware encoders yet** (libx264 only); bitrate caps added after grainy footage produced oversized files.
+- v0.1.0 tag waits for the "E2E on all 3 OS CI runners" acceptance criterion: the workflow exists but GitHub
+  Actions has not run on this repository yet.

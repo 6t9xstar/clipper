@@ -7,4 +7,13 @@ Runtime dependency not distributed with this repository:
 - FFmpeg (https://ffmpeg.org) is invoked as a separate program. Most binary builds (including those with libx264)
   are licensed under the GPL. Clipper does not link against FFmpeg; users install it themselves.
 
+Bundled fonts (backend/clipper/render/fonts/, licence texts alongside them), used for captions in the editor
+preview and burned into exported videos:
+- Anton: Copyright 2020 The Anton Project Authors. SIL Open Font License 1.1 (OFL-Anton.txt).
+- Montserrat (Black, ExtraBold, Bold): Copyright 2024 The Montserrat.Git Project Authors. SIL Open Font
+  License 1.1 (OFL-Montserrat.txt).
+The fonts are unmodified and are not sold on their own.
+
+Captions are drawn by libass through FFmpeg's `ass` filter (part of the user's FFmpeg build; ISC licence).
+
 Python dependencies and their licenses are listed in uv.lock; a license report will be added before the first release.

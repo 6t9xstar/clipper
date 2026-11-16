@@ -148,3 +148,57 @@ PATCH /api/v1/assets/{id}/transcript   If-Match: "2"        {"words": [{"i": 41,
 captions). Timings stay as recognised. Same `428`/`412 VERSION_CONFLICT` rules as clips; `422 WORD_INDEX` for an
 index that does not exist.
 `DELETE /api/v1/projects/{id}` removes the project, its videos and every file under it.
+
+## Exporting (M5)
+
+### Start an export
+```
+GET  /api/v1/export-qualities                         -> standard (1080×1920), high (1080×1920, slower), draft (720×1280)
+POST /api/v1/clips/{id}/exports   If-Match: "3"       {"quality": "standard"}      -> 202 Export (status "queued")
+```
+The export uses the **saved** clip: its range, title, caption style/position, framing and the transcript (with
+corrections) are frozen into `settings` when you ask, so later edits do not change a running or finished export.
+`settings_hash` identifies that snapshot. `If-Match` is optional; with it, a clip that changed since you read it is
+`412 VERSION_CONFLICT`. Asking again for the same snapshot while one is still queued/rendering returns that export
+with `200` instead of starting a second render. Other errors: `409 ASSET_NOT_READY`, `422` for an unknown quality,
+`507 DISK_FULL` (the hint says how much to free).
+
+Progress comes from the job (`progress`, `progress_message` on the export; cancel with
+`POST /api/v1/jobs/{job_id}/cancel` → `status: "cancelled"`). Status: `queued → rendering → done | failed | cancelled`.
+
+### Read exports and files
+```
+GET    /api/v1/exports/{id}
+GET    /api/v1/clips/{id}/exports                     newest first
+GET    /api/v1/projects/{id}/exports?limit=50         job history for the project page
+GET    /api/v1/exports/{id}/files/{mp4|srt|vtt|json}[?download=1]
+DELETE /api/v1/exports/{id}                           -> 204 (removes its files)
+```
+A finished export has `files` (`{"mp4": bytes, "srt": …}`), `duration_ms`, `width`, `height`, `fps`,
+`loudness_lufs` and `checks`. Files support HTTP `Range` (seeking in a `<video>`); `?download=1` sets
+`Content-Disposition` with a name made from the clip title (e.g. `my-clip-1a2b3c.mp4`). SRT/VTT exist only when the
+clip has transcript words. `clip.json` is a manifest: source file SHA-256 and the rights declaration, clip range,
+video/audio settings including the loudness processing applied, caption settings, `settings_hash` and the checks.
+`404 EXPORT_FILE_NOT_FOUND` for a file this export does not have, `410 EXPORT_FILE_GONE` if it was removed from
+disk outside Clipper. Deleting an export that is still rendering is `409 EXPORT_RUNNING` (it is cancelled; try
+again in a few seconds); a file held open by another program is `409 FILES_IN_USE`.
+
+Deleting a clip or a video stops and removes its exports (`409 CLIP_BUSY` / `ASSET_BUSY` if a render is still
+shutting down).
+
+`GET /api/v1/clips/{id}/captions.srt` and `.vtt` return the saved clip's captions without rendering a video.
+
+### What an export is
+- MP4: H.264 (libx264, High profile, `yuv420p`, BT.709, `+faststart`, metadata from the source stripped), the
+  source frame rate capped at 60 fps, AAC 48 kHz stereo. Bitrate is capped per quality (16 / 24 / 6 Mbit/s) so
+  grainy footage does not produce huge files.
+- Captions are burned in with libass using the same bundled fonts and line layout the editor preview draws
+  (measured within 3 px of the 1080×1920 frame in tests).
+- **Loudness:** targets −14 LUFS integrated with true peak ≤ −1.5 dBTP. Quiet speech with sharp peaks cannot reach
+  that with gain alone, so Clipper applies a limiter, but at most 8 dB of limiting (more audibly squashes the
+  sound). In that case the clip stays quieter than −14 LUFS and `checks.loudness` is `ok: false` with a `note`
+  explaining it — the export is still `done`. Silent audio (below −60 LUFS) is left untouched.
+- **Checks** (`checks`, measured on the written file with ffprobe and ebur128): video codec, size, duration within
+  one frame of the clip, audio present (or absent when the source has none), loudness. Any failed check except
+  loudness fails the export with `EXPORT_VERIFY_FAILED`. Other failure codes: `RENDER_FAILED` (FFmpeg error,
+  message included), `SOURCE_MISSING`, `ASSET_GONE`, `EXPORT_GONE`.

@@ -1,11 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRef, useState } from "react";
 import { Link, useParams } from "react-router";
+import { fileUrl } from "../components/ExportPanel";
 import { Badge, Button, ErrorBox, Field, Notice, ProgressBar, inputCls } from "../components/ui";
 import { api } from "../lib/api";
 import { useJob } from "../lib/queries";
 import { bytes, fmt } from "../lib/time";
-import { RIGHTS, type Asset, type Page, type Project } from "../lib/types";
+import { RIGHTS, type Asset, type Export, type Page, type Project } from "../lib/types";
 import { uploadFile } from "../lib/upload";
 
 const ACCEPT = ".mp4,.mov,.m4v,.mkv,.webm,.avi,.ts,.mts,.m2ts,.flv";
@@ -44,6 +45,7 @@ export function ProjectPage() {
                     ))}
                 </ul>
             </section>
+            <ExportHistory projectId={projectId} />
         </div>
     );
 }
@@ -196,6 +198,8 @@ const STATUS_TONE: Record<string, string> = {
     failed: "red",
     processing: "violet",
     uploading: "amber",
+    queued: "amber",
+    rendering: "violet",
 };
 
 function AssetRow({ asset: a }: { asset: Asset }) {
@@ -305,5 +309,51 @@ function AssetRow({ asset: a }: { asset: Asset }) {
             )}
             <ErrorBox error={remove.error ?? upload.error} />
         </li>
+    );
+}
+
+/** Every export in the project, newest first: the render job history. */
+function ExportHistory({ projectId }: { projectId: string }) {
+    const q = useQuery({
+        queryKey: ["project-exports", projectId],
+        queryFn: () => api<Page<Export>>(`/projects/${projectId}/exports?limit=50`),
+        refetchInterval: (x) =>
+            x.state.data?.items.some((e) => e.status === "queued" || e.status === "rendering") ? 2000 : false,
+    });
+    if (!q.data?.items.length) return <ErrorBox error={q.error} />;
+    return (
+        <section className="space-y-3" data-testid="export-history">
+            <h2 className="text-lg font-semibold">Exports</h2>
+            <ul className="divide-y divide-neutral-800 rounded-lg border border-neutral-800 text-sm">
+                {q.data.items.map((e) => (
+                    <li key={e.id} className="flex flex-wrap items-center gap-3 px-3 py-2">
+                        <Badge tone={STATUS_TONE[e.status === "done" ? "ready" : e.status] ?? "neutral"}>
+                            {e.status}
+                        </Badge>
+                        <Link
+                            to={`/clips/${e.clip_id}`}
+                            className="min-w-0 flex-1 truncate hover:text-violet-300"
+                        >
+                            {e.title ?? "Untitled clip"}
+                        </Link>
+                        <span className="text-xs text-neutral-400">
+                            {e.quality}
+                            {e.duration_ms != null && ` · ${fmt(e.duration_ms / 1000)}`}
+                            {e.files.mp4 != null && ` · ${bytes(e.files.mp4)}`} ·{" "}
+                            {new Date(e.created_at * 1000).toLocaleString()}
+                        </span>
+                        {e.status === "done" && (
+                            <a
+                                className="text-xs text-violet-300 hover:underline"
+                                href={fileUrl(e, "mp4", true)}
+                                download
+                            >
+                                Download
+                            </a>
+                        )}
+                    </li>
+                ))}
+            </ul>
+        </section>
     );
 }

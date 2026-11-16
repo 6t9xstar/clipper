@@ -28,9 +28,9 @@ describe("framing", () => {
 
 describe("captions", () => {
     const groups: CaptionGroup[] = [
-        { s: 0, e: 1, lines: [] },
-        { s: 1, e: 2.5, lines: [] },
-        { s: 4, e: 5, lines: [] },
+        { s: 0, e: 1, lines: [], fit: [] },
+        { s: 1, e: 2.5, lines: [], fit: [] },
+        { s: 4, e: 5, lines: [], fit: [] },
     ];
     it("finds the visible group, including gaps", () => {
         expect(activeGroup(groups, 0)).toBe(groups[0]);

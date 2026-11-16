@@ -14,6 +14,7 @@ from fastapi.staticfiles import StaticFiles
 
 from clipper.api.errors import ApiError
 from clipper.core import token as tokens
+from clipper.render.fontinfo import FONTS_DIR
 
 DIST = Path(__file__).resolve().parent.parent / "web" / "dist"
 CSP = (
@@ -34,6 +35,8 @@ npm run build</pre>
 
 def install(app: FastAPI, token: str, dist: Path = DIST) -> None:
     # Vite's assetsDir is "static" (frontend/vite.config.ts); "/assets/..." belongs to the app's own routes
+    # caption fonts (SIL OFL, licence files alongside): the preview draws with the same fonts as the render
+    app.mount("/fonts", StaticFiles(directory=FONTS_DIR), name="fonts")
     if (dist / "static").is_dir():
         app.mount("/static", StaticFiles(directory=dist / "static"), name="web-static")
 
