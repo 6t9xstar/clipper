@@ -8,11 +8,14 @@ import threading
 import traceback
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from clipper.core.logging import log
 from clipper.jobs.errors import JobCancelled, JobError, LeaseLost
 from clipper.jobs.queue import Claimed, JobQueue
+
+if TYPE_CHECKING:
+    from clipper.core.services import Services
 
 
 @dataclass
@@ -21,6 +24,7 @@ class JobContext:
 
     job: Claimed
     queue: JobQueue
+    services: Services | None = None
     _cancel: threading.Event = field(default_factory=threading.Event)
     _lost: threading.Event = field(default_factory=threading.Event)
     _progress: tuple[float | None, str | None] = (None, None)
@@ -28,6 +32,12 @@ class JobContext:
     @property
     def payload(self) -> dict[str, Any]:
         return self.job.payload
+
+    @property
+    def svc(self) -> Services:
+        if self.services is None:
+            raise RuntimeError("this job type needs a Worker created with services=")
+        return self.services
 
     def is_cancelled(self) -> bool:
         return self._cancel.is_set() or self._lost.is_set()
@@ -63,8 +73,10 @@ class Worker:
         poll_seconds: float = 1.0,
         handlers: dict[str, Handler] | None = None,
         worker_id: str | None = None,
+        services: Services | None = None,
     ) -> None:
         self.queue = queue
+        self.services = services
         self.poll = poll_seconds
         self.handlers = handlers if handlers is not None else HANDLERS
         self.id = worker_id or f"{socket.gethostname()}:{os.getpid()}:{threading.get_ident()}"
@@ -88,7 +100,7 @@ class Worker:
         return True
 
     def _execute(self, job: Claimed) -> None:
-        ctx = JobContext(job=job, queue=self.queue)
+        ctx = JobContext(job=job, queue=self.queue, services=self.services)
         done = threading.Event()
         interval = max(0.2, self.queue.lease_seconds / 3)
 

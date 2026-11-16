@@ -12,6 +12,7 @@ from fastapi.responses import JSONResponse, Response
 from sqlalchemy import select, text
 
 from clipper import __version__
+from clipper.api import assets as assets_api
 from clipper.api import errors
 from clipper.api.errors import ApiError
 from clipper.api.schemas import JobCreate, JobOut, Page, ProjectCreate, ProjectOut, ProjectUpdate
@@ -19,33 +20,17 @@ from clipper.api.security import LocalGuardMiddleware
 from clipper.core.config import Settings, get_settings
 from clipper.core.ids import is_valid_id
 from clipper.core.logging import configure_logging
+from clipper.core.services import Services
 from clipper.db import migrate
 from clipper.db.models import TERMINAL, Job, JobStatus, Project
-from clipper.db.session import Database
-from clipper.jobs.queue import JobQueue
-from clipper.storage import LocalStorage
 
 
-class AppState:
-    def __init__(self, settings: Settings) -> None:
-        self.settings = settings
-        settings.data_dir.mkdir(parents=True, exist_ok=True)
-        self.db = Database(settings.db_url)
-        self.storage = LocalStorage(settings.data_dir / "storage")
-        self.queue = JobQueue(
-            self.db,
-            lease_seconds=settings.job_lease_seconds,
-            max_attempts=settings.job_max_attempts,
-            backoff=settings.job_retry_backoff_seconds,
-        )
-
-
-def state(request: Request) -> AppState:
-    st: AppState = request.app.state.clipper
+def state(request: Request) -> Services:
+    st: Services = request.app.state.clipper
     return st
 
 
-St = Annotated[AppState, Depends(state)]
+St = Annotated[Services, Depends(state)]
 
 
 def _check_id(value: str) -> str:
@@ -64,9 +49,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             parents=True, exist_ok=True
         )  # fresh install: folder must exist before SQLite opens
         migrate.upgrade(settings.db_url)
-        app.state.clipper = AppState(settings)
+        app.state.clipper = Services(settings)
         yield
-        app.state.clipper.db.dispose()
+        app.state.clipper.close()
 
     app = FastAPI(
         title="Clipper API",
@@ -164,7 +149,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     "They are being cancelled. Try deleting again in a few seconds.",
                 )
             s.delete(p)
-        st.storage.delete_prefix(f"projects/{pid}")
+        try:
+            st.storage.delete_prefix(f"projects/{pid}")
+        except OSError as e:  # e.g. Windows: a file is still open by an upload or player
+            raise ApiError(
+                409,
+                "FILES_IN_USE",
+                "Some project files are still in use.",
+                "The project was removed; leftover files will be cleaned up. Try again shortly.",
+            ) from e
         return Response(status_code=204)
 
     # ---------------- jobs ----------------
@@ -217,4 +210,5 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return get_job(job_id, st)
 
     app.include_router(api)
+    app.include_router(assets_api.router)
     return app

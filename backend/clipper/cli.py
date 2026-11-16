@@ -10,6 +10,7 @@ import signal
 import subprocess
 import sys
 import threading
+import time
 from typing import Any
 
 from clipper import __version__
@@ -49,6 +50,22 @@ def doctor() -> dict[str, Any]:
             "Windows: `winget install Gyan.FFmpeg`; macOS: `brew install ffmpeg`; "
             "Debian/Ubuntu: `apt install ffmpeg`.",
         )
+    ff = shutil.which("ffmpeg")
+    if ff:
+        try:
+            enc = subprocess.run(
+                [ff, "-hide_banner", "-encoders"], capture_output=True, text=True, timeout=30
+            ).stdout
+            filt = subprocess.run(
+                [ff, "-hide_banner", "-filters"], capture_output=True, text=True, timeout=30
+            ).stdout
+        except (OSError, subprocess.TimeoutExpired):
+            enc = filt = ""
+        missing = [n for n in ("libx264", "aac") if f" {n} " not in enc]
+        missing += [f"filter:{n}" for n in ("tile", "scale", "ass") if f" {n} " not in filt]
+        add("ffmpeg_features", "fail" if missing else "ok",
+            "missing: " + ", ".join(missing) if missing else "libx264, aac, tile, scale, ass available",
+            "Install a full FFmpeg build (e.g. Gyan.FFmpeg on Windows, distro ffmpeg on Linux).")  # fmt: skip
     try:
         s.data_dir.mkdir(parents=True, exist_ok=True)
         probe = s.data_dir / ".write-test"
@@ -159,24 +176,32 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def _run_workers(n: int, *, block: bool) -> int:
-    import clipper.jobs.builtin  # noqa: F401  (registers handlers)
-    from clipper.db.session import Database
-    from clipper.jobs.queue import JobQueue
+    import clipper.jobs.builtin
+    import clipper.media.importer  # noqa: F401
+    from clipper.core.services import Services
     from clipper.jobs.worker import Worker
+    from clipper.maintenance import sweep
 
     s = get_settings()
-    db = Database(s.db_url)
-    q = JobQueue(
-        db,
-        lease_seconds=s.job_lease_seconds,
-        max_attempts=s.job_max_attempts,
-        backoff=s.job_retry_backoff_seconds,
-    )
-    workers = [Worker(q, poll_seconds=s.worker_poll_seconds) for _ in range(n)]
+    svc = Services(s)
+    sweep(svc)
+    workers = [Worker(svc.queue, poll_seconds=s.worker_poll_seconds, services=svc) for _ in range(n)]
     threads = [
         threading.Thread(target=w.run_forever, daemon=not block, name=f"worker-{i}")
         for i, w in enumerate(workers)
     ]
+
+    def _housekeeping() -> None:
+        while True:
+            time.sleep(3600)
+            try:
+                sweep(svc)
+            except Exception:  # never let housekeeping kill the process
+                from clipper.core.logging import log
+
+                log.warning("maintenance.failed", exc_info=True)
+
+    threading.Thread(target=_housekeeping, daemon=True, name="housekeeping").start()
     for t in threads:
         t.start()
     if block:

@@ -3,6 +3,7 @@ from __future__ import annotations
 from alembic import command
 from alembic.autogenerate import compare_metadata
 from alembic.migration import MigrationContext
+from alembic.script import ScriptDirectory
 from sqlalchemy import inspect
 
 from clipper.core.config import Settings
@@ -15,11 +16,12 @@ def test_upgrade_downgrade_roundtrip(settings: Settings) -> None:
     settings.data_dir.mkdir(parents=True)
     migrate.upgrade(settings.db_url)
     db = Database(settings.db_url)
-    assert {"projects", "jobs"} <= set(inspect(db.engine).get_table_names())
+    assert {"projects", "jobs", "assets"} <= set(inspect(db.engine).get_table_names())
     command.downgrade(migrate.alembic_config(settings.db_url), "base")
     assert "jobs" not in inspect(db.engine).get_table_names()
     migrate.upgrade(settings.db_url)
-    assert migrate.current_revision(db) == "0001"
+    head = ScriptDirectory.from_config(migrate.alembic_config(settings.db_url)).get_current_head()
+    assert head and migrate.current_revision(db) == head
     db.dispose()
 
 

@@ -6,7 +6,7 @@ import enum
 import time
 from typing import Any
 
-from sqlalchemy import JSON, Boolean, Float, ForeignKey, Index, Integer, String, Text
+from sqlalchemy import JSON, BigInteger, Boolean, Float, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 from clipper.core.ids import new_id
@@ -34,6 +34,54 @@ class Project(Base):
     created_at: Mapped[float] = mapped_column(Float, default=time.time)
     updated_at: Mapped[float] = mapped_column(Float, default=time.time, onupdate=time.time)
     settings: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+
+
+class AssetStatus(enum.StrEnum):
+    UPLOADING = "uploading"  # bytes still arriving (resumable)
+    PROCESSING = "processing"  # import job: validate, hash, proxy, waveform, thumbnails
+    READY = "ready"
+    FAILED = "failed"
+
+
+class RightsType(enum.StrEnum):
+    """The user's declared basis for using the source video (shown on the asset and in exports)."""
+
+    OWN_CONTENT = "own_content"
+    LICENSED = "licensed"
+    PERMISSION_FROM_OWNER = "permission_from_owner"
+    PUBLIC_DOMAIN_OR_CC = "public_domain_or_cc"
+    OTHER = "other"
+
+
+class Asset(Base):
+    """An imported source video. `display_name` is the user's file name: UI only, never used as a path."""
+
+    __tablename__ = "assets"
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=new_id)
+    project_id: Mapped[str] = mapped_column(
+        String(32), ForeignKey("projects.id", ondelete="CASCADE"), index=True
+    )
+    display_name: Mapped[str] = mapped_column(String(255))
+    status: Mapped[str] = mapped_column(String(16), default=AssetStatus.UPLOADING)
+    size_bytes: Mapped[int] = mapped_column(BigInteger)  # declared size; upload must match exactly
+    received_bytes: Mapped[int] = mapped_column(BigInteger, default=0)
+    sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    rights_type: Mapped[str] = mapped_column(String(32))
+    rights_note: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    rights_confirmed_at: Mapped[float] = mapped_column(Float)
+    # media facts (from ffprobe, normalised; see clipper.media.probe)
+    duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    width: Mapped[int | None] = mapped_column(Integer, nullable=True)  # display size, after rotation
+    height: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    fps: Mapped[float | None] = mapped_column(Float, nullable=True)
+    has_audio: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    media_info: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    warnings: Mapped[list[str]] = mapped_column(JSON, default=list)
+    import_job_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    error_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    error_message: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    created_at: Mapped[float] = mapped_column(Float, default=time.time)
+    updated_at: Mapped[float] = mapped_column(Float, default=time.time, onupdate=time.time)
 
 
 class Job(Base):

@@ -41,4 +41,7 @@ def test_doctor_reports_structure(monkeypatch: pytest.MonkeyPatch, tmp_path: Pat
         config.get_settings.cache_clear()
     names = {c["check"] for c in rep["checks"]}
     assert {"python", "ffmpeg", "ffprobe", "data_dir", "database", "gpu"} <= names
+    if "ffmpeg_features" in names:
+        feat = next(c for c in rep["checks"] if c["check"] == "ffmpeg_features")
+        assert feat["status"] in {"ok", "fail"}
     assert rep["status"] in {"ok", "warn", "fail"}

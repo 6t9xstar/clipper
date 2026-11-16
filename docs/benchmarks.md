@@ -40,3 +40,24 @@ GPU VRAM used ≈ 1.2 GB for large-v3-turbo.
 - ASR accuracy on real speech, gaming audio with music/SFX.
 - Highlight usefulness on real long-form content (needs a labelled set of real videos).
 - Performance on a minimum-spec machine (4 cores, 8 GB, no GPU).
+
+---
+
+# M2 — Long-file import (2026-11-16)
+`uv run python scripts/bench_long_import.py --hours 3 --data-dir data/bench` (same machine as above).
+Synthetic 3 h source: 640×360 30 fps H.264 + AAC tone, 1138 MB.
+
+| Metric | Result |
+|---|---|
+| Status | `ready`, duration 10 800 000 ms |
+| Upload (64 MiB chunks, in-process client) | 10.1 s |
+| Import (hash, probe, decode check, proxy + sprite + ASR audio, waveform) | 1883 s = **5.7× faster than real time** |
+| Peak FFmpeg RSS | 220 MB |
+| Peak Python RSS (client **and** server in one process) | 473 MB — not a server-only figure; see below |
+| Thumbnails | 120 tiles (cap reached), every 90 s |
+
+Notes:
+- The source is 360p, so the proxy is not downscaled; 1080p sources will import slower (decode-bound). To be measured
+  with real footage.
+- The in-process benchmark cannot separate the test client's buffering of 64 MiB chunks from the server. A
+  separate-process measurement of the server is pending.

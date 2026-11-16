@@ -1,4 +1,4 @@
-# Architecture — as implemented (M1)
+# Architecture — as implemented (M2)
 
 Target architecture: [PHASE1_PLAN.md §6](PHASE1_PLAN.md). This page describes only what exists in code today.
 
@@ -34,6 +34,19 @@ Verified by `backend/tests/test_queue.py` and `test_recovery.py` (real worker pr
 - IDs validated before touching DB or disk; external tools run with argv lists (no shell).
 - Logs carry IDs only.
 
+## Media import (M2)
+```
+POST asset (rights, size) -> PUT chunks (Upload-Offset) -> upload.part complete
+  -> job media.import: sha256 -> ffprobe + analyse() -> decode head/tail -> rename to `source`
+       -> ONE ffmpeg pass: proxy.mp4 (540p, 1 s GOP) + thumbs.jpg (sprite) + audio.wav (16 kHz mono)
+       -> waveform.json (20 peaks/s, block-wise, O(1) memory) -> asset READY
+```
+Storage per video: `storage/projects/{pid}/assets/{aid}/{source, derived/{proxy.mp4,thumbs.jpg,audio.wav,waveform.json}}`.
+All FFmpeg calls on user files use `-protocol_whitelist file -format_whitelist mov,matroska,webm,avi,mpegts,flv`.
+Input errors (`MediaError`) are never retried and free the uploaded bytes; tool/IO errors are retried.
+If an import job dies without updating its video (worker lost on last attempt, cancel), the API reconciles the
+video to `failed` on the next read. A housekeeping thread (startup + hourly) expires abandoned uploads.
+
 ## Not yet implemented
-Per-install API token (planned with the web UI in M4), uploads and media validation (M2), AI pipeline (M3),
+Per-install API token (planned with the web UI in M4), AI pipeline (M3),
 editor/UI (M4), rendering (M5), multi-user auth and PostgreSQL support (v1.0).

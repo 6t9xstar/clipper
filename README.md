@@ -3,9 +3,9 @@
 **Open-source, local-first AI video clipper** that turns your long videos into short vertical clips with captions —
 on your own computer, without uploading your media anywhere.
 
-> **Status: pre-alpha (milestone M1 of 7).** The backend foundation (database, job queue, API, CLI) is done and
-> tested. Video import, AI analysis, editing and export are **not in the app yet** — they are being built in
-> M2–M5. A working prototype of the clip pipeline lives in `spikes/` (see [docs/benchmarks.md](docs/benchmarks.md)).
+> **Status: pre-alpha (milestone M2 of 7).** Backend foundation (M1) and video import (M2: upload, validation,
+> preview proxy, thumbnails, waveform) are done and tested via the API. AI analysis, the web UI, editing and export
+> are **not in the app yet** — they are being built in M3–M5. A working prototype of the clip pipeline lives in `spikes/` (see [docs/benchmarks.md](docs/benchmarks.md)).
 > Do not use this for real work yet.
 
 Use it only with videos you made or have permission to use. See the plan's legal section
@@ -51,7 +51,7 @@ uv run pytest -q
 
 ## Documentation
 - [Phase 1 plan & architecture](docs/PHASE1_PLAN.md) · [Prototype results](docs/benchmarks.md)
-- [Architecture (implemented)](docs/architecture.md) · [Configuration](docs/configuration.md)
+- [Architecture (implemented)](docs/architecture.md) · [API guide](docs/api.md) · [Configuration](docs/configuration.md)
 - [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md) · [Changelog](CHANGELOG.md)
 
 ## License

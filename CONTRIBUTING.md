@@ -19,6 +19,7 @@ CI runs the same checks on Linux, Windows and macOS with Python 3.12 and 3.13.
 - **New settings** must be documented in `.env.example` and `docs/configuration.md` (a test enforces it).
 - Never log transcript text, user file names or media content — log IDs.
 - Run external tools via `clipper.jobs.proc.run` with argv lists — never `shell=True`.
+- Every FFmpeg/ffprobe call that reads a user file must include `clipper.media.probe.SAFE_INPUT_ARGS`.
 - No copyrighted test media. Generate test media with FFmpeg or use public-domain/CC0 files with provenance.
 - No features that download from platforms against their terms, or that evade copyright detection.
 - Every user-visible error needs a stable `code` and a helpful `hint`.
