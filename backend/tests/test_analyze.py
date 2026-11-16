@@ -23,6 +23,7 @@ from clipper.media.importer import asset_prefix
 from . import media_corpus
 from .test_highlights import STRONG, WEAK, speak
 from .test_import import create, drain, import_file, pytestmark, svc  # noqa: F401  (pytestmark: needs ffmpeg)
+from .util import authed
 
 CUTS = (20.0, 35.0)
 DURATION = 50.0
@@ -65,7 +66,7 @@ def calls(monkeypatch: pytest.MonkeyPatch) -> list[int]:
 @pytest.fixture
 def client(settings: Settings) -> Iterator[TestClient]:
     st = settings.model_copy(update={"asr_model": "tiny", "asr_device": "cpu"})
-    with TestClient(create_app(st), base_url="http://127.0.0.1") as c:
+    with authed(create_app(st)) as c:
         yield c
 
 

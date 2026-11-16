@@ -21,6 +21,7 @@ from clipper.jobs.worker import Worker
 from clipper.maintenance import sweep
 
 from . import media_corpus
+from .util import authed
 
 pytestmark = pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="ffmpeg not installed")
 
@@ -32,7 +33,7 @@ def corpus(tmp_path_factory: pytest.TempPathFactory) -> dict[str, Path]:
 
 @pytest.fixture
 def client(settings: Settings) -> Iterator[TestClient]:
-    with TestClient(create_app(settings), base_url="http://127.0.0.1") as c:
+    with authed(create_app(settings)) as c:
         yield c
 
 
@@ -171,7 +172,7 @@ def test_bad_files_fail_with_clear_codes(
 
 def test_too_long_uses_setting(tmp_path: Path, corpus: dict[str, Path]) -> None:
     s = Settings(data_dir=tmp_path / "d", log_json=False, max_duration_seconds=2)
-    with TestClient(create_app(s), base_url="http://127.0.0.1") as c:
+    with authed(create_app(s)) as c:
         assert import_file(c, corpus["good_h264.mp4"])["error_code"] == "MEDIA_TOO_LONG"
 
 

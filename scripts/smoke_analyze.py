@@ -160,6 +160,8 @@ def main() -> int:
                             break
                     except httpx.HTTPError:
                         time.sleep(0.5)
+                # API calls need the per-install token, which the server wrote on start-up
+                c.headers["x-clipper-token"] = (a.data_dir / "api_token").read_text().strip()
                 pid = c.post("/api/v1/projects", json={"name": "smoke"}).json()["id"]
                 data = video.read_bytes()
                 body = {

@@ -3,6 +3,11 @@
 Interactive reference (generated from the code): `http://127.0.0.1:8765/api/docs`.
 All errors are `application/problem+json` with a stable `code`, a human `title` and, where useful, a `hint`.
 
+**Access token (since M4).** Every `/api/*` request needs the per-install token from `CLIPPER_DATA_DIR/api_token`,
+sent as the header `X-Clipper-Token: <token>`. The web UI gets it automatically as an `HttpOnly`,
+`SameSite=Strict` cookie when the page loads. Without it: `401 TOKEN_REQUIRED`. `/healthz` and `/readyz` stay
+open. This keeps other programs and web pages on your computer from using the API; it is not a multi-user login.
+
 ## Importing a video
 
 ### 1. Declare the file
@@ -109,4 +114,37 @@ question → answer, concrete numbers, filler words, starting mid-thought, endin
 loudness relative to the rest of the video, shot-cut pace). Keyword features are **English-only**; for other
 languages ranking uses timing, loudness and pace. It does not understand humour, visuals or story. Review the
 suggestions — they are a starting point.
+
+If the transcript was corrected by hand (see below), `analyze` with `"retranscribe": true` returns
+`409 TRANSCRIPT_EDITED`; send `"discard_edits": true` as well to replace it anyway.
+
+## Editing clips (M4)
+
+### Captions and framing
+Each clip has an `edit` object, always returned complete (defaults filled in):
+```json
+{"captions": {"enabled": true, "preset": "bold", "position": null},
+ "framing":  {"mode": "crop", "x": 0.5, "y": 0.5, "zoom": 1.0}}
+```
+Change it with the same versioned `PATCH /api/v1/clips/{id}` (`If-Match`), e.g. `{"edit": {...}}`; unknown fields,
+unknown presets and out-of-range values are `422`. `position` is the vertical centre of the captions as a fraction
+of the frame height (`null` = the preset's default). `framing.mode`: `crop` fills the 9:16 frame around (`x`, `y`)
+with `zoom` 1–3; `fit` shows the whole frame over a blurred copy.
+
+`GET /api/v1/caption-presets` — the styles (`bold`, `clean`, `box`, `gaming`) with their font, size, colours and
+line-breaking limits, for a 1080×1920 frame.
+
+`GET /api/v1/clips/{id}/captions[?preset=&start_ms=&end_ms=]` — the words grouped into caption screens exactly as
+the renderer will group them: `{"preset", "groups": [{"s", "e", "lines": [[{"w","s","e"}]]}]}`, times in seconds
+relative to the clip start. `preset`/`start_ms`/`end_ms` preview unsaved choices. No transcript yet → empty
+`groups` with a `note`.
+
+### Correcting the transcript
+```
+GET   /api/v1/assets/{id}/transcript                        -> ETag: "2", "version": 2, "edited": false
+PATCH /api/v1/assets/{id}/transcript   If-Match: "2"        {"words": [{"i": 41, "w": "joggers"}]}
+```
+`i` is the word's index in `words`; `w` is the new text (up to 100 printable characters; empty hides the word from
+captions). Timings stay as recognised. Same `428`/`412 VERSION_CONFLICT` rules as clips; `422 WORD_INDEX` for an
+index that does not exist.
 `DELETE /api/v1/projects/{id}` removes the project, its videos and every file under it.

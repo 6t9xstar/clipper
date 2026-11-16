@@ -62,6 +62,8 @@ def main() -> None:
                         break
                 except httpx.HTTPError:
                     time.sleep(0.5)
+            # API calls need the per-install token, which the server wrote on start-up
+            c.headers["x-clipper-token"] = (a.data_dir.resolve() / "api_token").read_text().strip()
             idle = python_rss() / 2**20
             threading.Thread(target=sample, daemon=True).start()
             pid = c.post("/api/v1/projects", json={"name": "srv-bench"}).json()["id"]

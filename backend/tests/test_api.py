@@ -13,12 +13,14 @@ from clipper.core.config import Settings
 from clipper.jobs import builtin  # noqa: F401
 from clipper.jobs.worker import Worker
 
+from .util import authed
+
 H = {"host": "127.0.0.1"}
 
 
 @pytest.fixture
 def client(settings: Settings) -> Iterator[TestClient]:
-    with TestClient(create_app(settings), base_url="http://127.0.0.1") as c:
+    with authed(create_app(settings)) as c:
         yield c
 
 

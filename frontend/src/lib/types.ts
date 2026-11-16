@@ -1,0 +1,158 @@
+// Mirrors the backend schemas (backend/clipper/api/schemas.py). Keep in sync.
+
+export interface Page<T> {
+    items: T[];
+    next_cursor: string | null;
+}
+
+export interface Project {
+    id: string;
+    name: string;
+    created_at: number;
+    updated_at: number;
+}
+
+export type AssetStatus = "uploading" | "processing" | "ready" | "failed";
+
+export interface ThumbSpec {
+    count: number;
+    interval_s: number;
+    cols: number;
+    rows: number;
+    tile_w: number;
+    tile_h: number;
+}
+
+export interface Asset {
+    id: string;
+    project_id: string;
+    display_name: string;
+    status: AssetStatus;
+    size_bytes: number;
+    received_bytes: number;
+    rights_type: string;
+    duration_ms: number | null;
+    width: number | null;
+    height: number | null;
+    fps: number | null;
+    has_audio: boolean | null;
+    warnings: string[];
+    media_info: { thumbs?: ThumbSpec; proxy?: { width: number; height: number } } | null;
+    import_job_id: string | null;
+    analysis_job_id: string | null;
+    error_code: string | null;
+    error_message: string | null;
+    error_hint: string | null;
+    created_at: number;
+    upload_url: string | null;
+}
+
+export type JobStatus = "queued" | "running" | "succeeded" | "failed" | "cancelled";
+
+export interface Job {
+    id: string;
+    type: string;
+    status: JobStatus;
+    attempts: number;
+    max_attempts: number;
+    progress: number;
+    progress_message: string | null;
+    cancel_requested: boolean;
+    result: Record<string, unknown> | null;
+    error_code: string | null;
+}
+
+export type ClipStatus = "suggested" | "approved" | "rejected";
+
+export interface CaptionsEdit {
+    enabled: boolean;
+    preset: string;
+    position: number | null;
+}
+
+export interface FramingEdit {
+    mode: "crop" | "fit";
+    x: number;
+    y: number;
+    zoom: number;
+}
+
+export interface ClipEdit {
+    captions: CaptionsEdit;
+    framing: FramingEdit;
+}
+
+export interface Clip {
+    id: string;
+    project_id: string;
+    asset_id: string;
+    start_ms: number;
+    end_ms: number;
+    origin: "ai" | "manual";
+    status: ClipStatus;
+    score: number | null;
+    rank: number | null;
+    reasons: string[];
+    features: Record<string, number>;
+    title: string | null;
+    edit: ClipEdit;
+    version: number;
+}
+
+export interface Word {
+    w: string;
+    s: number;
+    e: number;
+    p?: number;
+}
+
+export interface Transcript {
+    language: string;
+    model: string;
+    device: string;
+    word_count: number;
+    edited: boolean;
+    version: number;
+    notes: string[];
+    words: Word[];
+}
+
+export interface Preset {
+    id: string;
+    name: string;
+    description: string;
+    font_family: string;
+    font_weight: number;
+    size: number;
+    uppercase: boolean;
+    color: string;
+    highlight: string | null;
+    outline: number;
+    outline_color: string;
+    shadow: number;
+    box: string | null;
+    max_words: number;
+    max_chars_per_line: number;
+    max_lines: number;
+    position: number;
+}
+
+export interface CaptionGroup {
+    s: number;
+    e: number;
+    lines: Word[][];
+}
+
+export interface Captions {
+    preset: Preset;
+    groups: CaptionGroup[];
+    note?: string;
+}
+
+export const RIGHTS: { value: string; label: string }[] = [
+    { value: "own_content", label: "I made this video" },
+    { value: "licensed", label: "I have a licence for it" },
+    { value: "permission_from_owner", label: "The owner gave me permission" },
+    { value: "public_domain_or_cc", label: "Public domain / Creative Commons (licence allows edits)" },
+    { value: "other", label: "Other (explain)" },
+];

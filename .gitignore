@@ -11,3 +11,8 @@ build/
 # runtime data (projects, media, DB) never goes in git
 data/
 .env
+# web UI build output and tooling
+backend/clipper/web/dist/
+node_modules/
+frontend/test-results/
+frontend/playwright-report/

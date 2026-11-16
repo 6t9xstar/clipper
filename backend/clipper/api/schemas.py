@@ -4,6 +4,8 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from clipper.edit.schema import ClipEdit, normalised
+
 
 def _clean_name(v: str | None) -> str | None:
     if v is None:
@@ -146,6 +148,7 @@ class AnalyzeRequest(BaseModel):
         default=None, pattern=r"^[a-z]{2,3}$", description="Spoken language; empty = detect"
     )
     retranscribe: bool = Field(default=False, description="Ignore the cached transcript")
+    discard_edits: bool = Field(default=False, description="Allow retranscribe to overwrite transcript edits")
 
     @model_validator(mode="after")
     def _range(self) -> AnalyzeRequest:
@@ -173,6 +176,11 @@ class ClipOut(BaseModel):
     created_at: float
     updated_at: float
 
+    @field_validator("edit", mode="before")
+    @classmethod
+    def _full_edit(cls, v: dict[str, Any] | None) -> dict[str, Any]:
+        return normalised(v)
+
 
 class ClipCreate(BaseModel):
     start_ms: int = Field(ge=0)
@@ -186,4 +194,24 @@ class ClipUpdate(BaseModel):
     end_ms: int | None = Field(default=None, gt=0)
     status: str | None = Field(default=None, pattern=r"^(suggested|approved|rejected)$")
     title: str | None = Field(default=None, max_length=200)
+    edit: ClipEdit | None = Field(
+        default=None, description="Captions and framing; replaces the stored object"
+    )
     _v = field_validator("title")(_clean_name)
+
+
+class WordEdit(BaseModel):
+    i: int = Field(ge=0, description="Word index in the transcript")
+    w: str = Field(max_length=100, description="New text; empty hides the word in captions and scoring")
+
+    @field_validator("w")
+    @classmethod
+    def _printable(cls, v: str) -> str:
+        v = " ".join(v.split())
+        if any(not ch.isprintable() for ch in v):
+            raise ValueError("word must be printable text")
+        return v
+
+
+class TranscriptEdit(BaseModel):
+    words: list[WordEdit] = Field(min_length=1, max_length=2000)

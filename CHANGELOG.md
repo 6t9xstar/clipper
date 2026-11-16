@@ -4,6 +4,18 @@ versioning: [SemVer](https://semver.org/).
 
 ## [Unreleased]
 ### Added
+- M4 web editor (`frontend/`, served by `clipper serve`): projects, resumable import with rights confirmation,
+  analysis with progress/cancel, clip gallery (approve/reject/delete, manual clips), and a clip editor with
+  waveform trimming (drag, keyboard, snap to words, loop), transcript word corrections, four caption styles with
+  position, 9:16 crop/fit framing with drag-to-pan, and a live preview. Edits save with optimistic concurrency and
+  a "load the latest version" path on conflict. API: clip `edit` object, `GET /caption-presets`,
+  `GET /clips/{id}/captions`, versioned `PATCH /assets/{id}/transcript`, `discard_edits` on analyze.
+  Tests: Vitest unit tests, Playwright flows against a real server (installed Edge/Chrome), shared framing vectors.
+### Security
+- `/api/*` now requires a per-install access token (`data/api_token`; header `X-Clipper-Token` or the
+  `HttpOnly`/`SameSite=Strict` cookie set by the UI). Scripts calling the API must send the header.
+- UI pages are served with a strict Content-Security-Policy (no inline scripts or styles, no framing).
+### Added (earlier milestones)
 - M3 AI analysis: `ai.analyze` job with local faster-whisper transcription (GPU with CPU fallback, model cache
   in `data/models`), FFmpeg scene-cut detection and an explainable highlight scorer (speech mode on sentence
   boundaries; audio mode on loudness and pace for videos with little speech; English-only keyword features

@@ -89,6 +89,7 @@ def _transcribe(ctx: JobContext, a: Asset, derived: Path, prefix: str, force: bo
         row.language, row.language_probability = res.language, res.language_probability
         row.model, row.device, row.word_count = res.model, res.device, len(res.words)
         row.seconds_taken, row.edited, row.created_at = round(took, 2), False, time.time()
+        row.version = (row.version or 0) + 1  # clients holding the old transcript must reload
         s.merge(row)
     log.info(
         "asr.done",
@@ -152,8 +153,9 @@ def analyze(ctx: JobContext) -> dict[str, Any]:
     if wf.exists():
         w = json.loads(wf.read_text())
         peaks, rate = w["peaks"], float(w["rate"])
+    spoken = [w for w in tr["words"] if str(w["w"]).strip()]  # hidden (deleted) words are ignored
     res = highlights.find_highlights(
-        tr["words"],
+        spoken,
         duration=(a.duration_ms or 0) / 1000,
         language=tr.get("language"),
         cuts=cuts,

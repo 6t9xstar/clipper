@@ -25,6 +25,10 @@ A test (`backend/tests/test_config.py`) fails if a setting exists that is not do
 | `CLIPPER_MAX_DURATION_SECONDS` | `14400` (4 h) | Longest accepted video *(enforced from M2)*. |
 | `CLIPPER_TEMP_RETENTION_HOURS` | `24` | Age after which temporary files are swept *(from M2)*. |
 
+**Access token.** On first start Clipper writes a random token to `CLIPPER_DATA_DIR/api_token`. Scripts send
+it as the `X-Clipper-Token` header; the web UI receives it as a cookie. Delete the file and restart to issue a
+new one (open browser tabs then need a reload). Keep it private like a password.
+
 **Model download.** The first analysis downloads the speech model from Hugging Face (`huggingface.co`) into
 `CLIPPER_DATA_DIR/models`; afterwards Clipper works offline. Clipper sets `HF_HUB_DISABLE_XET=1` (plain HTTPS)
 because the Xet transfer backend stalled indefinitely in testing; set `HF_HUB_DISABLE_XET=0` to use Xet anyway.

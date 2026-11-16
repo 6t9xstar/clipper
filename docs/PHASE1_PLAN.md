@@ -503,3 +503,12 @@ Local-first; no telemetry by default; data deletion = hard delete of DB rows + f
 - §4.9: caption engine must do line-breaking to frame width, and preview must convert ASS size → CSS size via font metrics.
 - §4.6: add `topic_break` (long pause) penalty; filler detection must not match "did you know".
 - Still open: real-footage validation of face detection, active speaker, ASR on real/gaming audio, highlight quality.
+
+## 16. Revisions during M4 (2026-11-16)
+- Frontend package manager is **npm** (ships with Node; one fewer tool for contributors) instead of pnpm.
+- UI components are plain Tailwind + small local components instead of shadcn/ui (fewer dependencies; can be
+  revisited).
+- Per-install API token added (header or `SameSite=Strict` cookie) on top of Host/Origin checks.
+- Caption line-breaking is server-side only; the preview draws server-provided groups. Preview font metrics are
+  approximate until the renderer calibrates them in M5.
+- Playwright runs against installed Edge/Chrome channels (no browser download).

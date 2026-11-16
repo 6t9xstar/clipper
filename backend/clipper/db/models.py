@@ -99,6 +99,7 @@ class Transcript(Base):
     word_count: Mapped[int] = mapped_column(Integer)
     seconds_taken: Mapped[float] = mapped_column(Float)
     edited: Mapped[bool] = mapped_column(Boolean, default=False)
+    version: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
     created_at: Mapped[float] = mapped_column(Float, default=time.time)
 
 
