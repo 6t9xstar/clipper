@@ -1,0 +1,65 @@
+[project]
+name = "clipper"
+version = "0.1.0.dev0"
+description = "Open-source, local-first AI video clipper for creators' own content"
+readme = "README.md"
+license = "Apache-2.0"
+requires-python = ">=3.12,<3.14"
+dependencies = [
+  "fastapi>=0.115,<1",
+  "uvicorn[standard]>=0.32,<1",
+  "pydantic>=2.9,<3",
+  "pydantic-settings>=2.6,<3",
+  "sqlalchemy>=2.0.36,<2.1",
+  "alembic>=1.14,<2",
+  "structlog>=24.4",
+  "psutil>=6.1",
+]
+
+[project.optional-dependencies]
+postgres = ["psycopg[binary]>=3.2,<4"]
+
+[project.scripts]
+clipper = "clipper.cli:main"
+
+[dependency-groups]
+dev = [
+  "pytest>=8.3",
+  "httpx>=0.28",
+  "ruff>=0.8",
+  "mypy>=1.13",
+  "types-psutil",
+]
+
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["backend/clipper"]
+
+[tool.ruff]
+line-length = 110
+target-version = "py312"
+src = ["backend"]
+extend-exclude = ["spikes"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "S", "SIM", "RUF"]
+ignore = ["S603", "S607"]  # subprocess with argv lists is the intended pattern
+
+[tool.ruff.lint.per-file-ignores]
+"backend/tests/**" = ["S101", "S108"]
+"backend/clipper/migrations/**" = ["E501"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+mypy_path = "backend"
+packages = ["clipper"]
+exclude = ["backend/clipper/migrations/"]
+
+[tool.pytest.ini_options]
+testpaths = ["backend/tests"]
+pythonpath = ["backend"]
+addopts = "-ra"

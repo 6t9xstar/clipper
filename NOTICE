@@ -1,0 +1,10 @@
+Clipper
+Copyright 2026 Clipper contributors
+
+This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+
+Runtime dependency not distributed with this repository:
+- FFmpeg (https://ffmpeg.org) is invoked as a separate program. Most binary builds (including those with libx264)
+  are licensed under the GPL. Clipper does not link against FFmpeg; users install it themselves.
+
+Python dependencies and their licenses are listed in uv.lock; a license report will be added before the first release.
