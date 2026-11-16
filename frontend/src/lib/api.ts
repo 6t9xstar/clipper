@@ -19,6 +19,8 @@ export class ApiError extends Error {
 export interface Opts {
     method?: string;
     body?: unknown;
+    /** raw request body (e.g. a recording); sent with its own content type */
+    raw?: Blob;
     ifMatch?: number;
     signal?: AbortSignal;
 }
@@ -26,13 +28,14 @@ export interface Opts {
 export async function api<T>(path: string, opts: Opts = {}): Promise<T> {
     const headers: Record<string, string> = {};
     if (opts.body !== undefined) headers["content-type"] = "application/json";
+    if (opts.raw !== undefined) headers["content-type"] = opts.raw.type || "application/octet-stream";
     if (opts.ifMatch !== undefined) headers["if-match"] = `"${opts.ifMatch}"`;
     let r: Response;
     try {
         r = await fetch(`/api/v1${path}`, {
             method: opts.method ?? "GET",
             headers,
-            body: opts.body === undefined ? undefined : JSON.stringify(opts.body),
+            body: opts.raw ?? (opts.body === undefined ? undefined : JSON.stringify(opts.body)),
             credentials: "same-origin",
             signal: opts.signal,
         });

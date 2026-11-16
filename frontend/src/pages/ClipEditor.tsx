@@ -2,13 +2,26 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tansta
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router";
 import { ExportPanel } from "../components/ExportPanel";
+import { OverlayPanel, valid } from "../components/OverlayPanel";
+import { VoicePanel, VoicePlayback } from "../components/VoicePanel";
 import { Preview } from "../components/Preview";
 import { Timeline } from "../components/Timeline";
 import { TranscriptPanel } from "../components/TranscriptPanel";
 import { Badge, Button, ErrorBox, Field, Notice, inputCls } from "../components/ui";
 import { ApiError, api } from "../lib/api";
+import { placedSegments } from "../lib/ducking";
 import { fmt } from "../lib/time";
-import type { Asset, Captions, Clip, ClipEdit, ClipStatus, Preset, Transcript } from "../lib/types";
+import type {
+    Asset,
+    Captions,
+    Clip,
+    ClipEdit,
+    ClipStatus,
+    OverlayLayout,
+    Preset,
+    Transcript,
+    VoiceTrack,
+} from "../lib/types";
 
 interface Draft {
     start: number;
@@ -71,6 +84,15 @@ function EditorBody({ clip, asset }: { clip: Clip; asset: Asset }) {
         queryFn: () => api<{ items: Preset[] }>("/caption-presets"),
         staleTime: Infinity,
     });
+    const overlayStylesQ = useQuery({
+        queryKey: ["overlay-styles"],
+        queryFn: () => api<{ items: Preset[] }>("/overlay-styles"),
+        staleTime: Infinity,
+    });
+    const takesQ = useQuery({
+        queryKey: ["voice", clip.id],
+        queryFn: () => api<{ items: VoiceTrack[] }>(`/clips/${clip.id}/voice`),
+    });
     const waveQ = useQuery({
         queryKey: ["waveform", asset.id],
         queryFn: () => api<{ rate: number; peaks: number[] }>(`/assets/${asset.id}/waveform`),
@@ -87,6 +109,7 @@ function EditorBody({ clip, asset }: { clip: Clip; asset: Asset }) {
     const [loop, setLoop] = useState(true);
     const [playing, setPlaying] = useState(false);
     const [now, setNow] = useState(clip.start_ms / 1000);
+    const [recording, setRecording] = useState(false);
     const video = useRef<HTMLVideoElement>(null);
 
     const dirty = useMemo(() => JSON.stringify(fromClip(clip)) !== JSON.stringify(draft), [clip, draft]);
@@ -116,6 +139,37 @@ function EditorBody({ clip, asset }: { clip: Clip; asset: Asset }) {
         enabled: !!capKey,
         placeholderData: keepPreviousData,
     });
+
+    // overlay layout (wrapping, fit, edge clamping) comes from the server, like caption grouping
+    const [selected, setSelected] = useState<string | null>(null);
+    const layoutKey = useDebounced(
+        {
+            overlays: draft.edit.overlays.filter(valid),
+            duration: Math.max(0.1, Math.round((draft.end - draft.start) * 1000) / 1000),
+        },
+        120,
+    );
+    const layoutQ = useQuery({
+        queryKey: ["overlay-layout", layoutKey],
+        queryFn: () =>
+            api<{ items: OverlayLayout[] }>("/overlays/layout", { method: "POST", body: layoutKey }),
+        enabled: layoutKey.overlays.length > 0,
+        placeholderData: keepPreviousData,
+        staleTime: Infinity,
+    });
+    const laidOut = draft.edit.overlays.length > 0 ? (layoutQ.data?.items ?? []) : [];
+    const takes = useMemo(() => takesQ.data?.items ?? [], [takesQ.data]);
+    const voiceSegments = useMemo(
+        () =>
+            placedSegments(
+                draft.edit.voiceovers.map((v) => ({
+                    start: v.start,
+                    segments: takes.find((k) => k.id === v.track_id)?.segments ?? [],
+                })),
+                draft.end - draft.start,
+            ),
+        [draft.edit.voiceovers, takes, draft.end, draft.start],
+    );
 
     const save = useMutation({
         mutationFn: (d: Draft) =>
@@ -164,14 +218,14 @@ function EditorBody({ clip, asset }: { clip: Clip; asset: Asset }) {
             const v = video.current;
             if (!v || v.paused || !draft) return;
             if (abs >= draft.end) {
-                if (loop) v.currentTime = draft.start;
+                if (loop && !recording) v.currentTime = draft.start;
                 else {
                     v.pause();
                     v.currentTime = draft.end;
                 }
             }
         },
-        [draft, loop],
+        [draft, loop, recording],
     );
     const toggle = useCallback(() => {
         const v = video.current;
@@ -268,6 +322,28 @@ function EditorBody({ clip, asset }: { clip: Clip; asset: Asset }) {
                         videoRef={video}
                         onTime={onTime}
                         onPan={(x, y) => setEdit((e) => ({ ...e, framing: { ...e.framing, x, y } }))}
+                        overlays={laidOut}
+                        overlayStyles={overlayStylesQ.data?.items ?? []}
+                        selected={selected}
+                        onMoveOverlay={(id, x, y) => {
+                            setSelected(id);
+                            setEdit((e) => ({
+                                ...e,
+                                overlays: e.overlays.map((o) => (o.id === id ? { ...o, x, y } : o)),
+                            }));
+                        }}
+                    />
+                    <VoicePlayback
+                        voiceovers={draft.edit.voiceovers}
+                        takes={takes}
+                        audio={draft.edit.audio}
+                        segments={voiceSegments}
+                        t={now - draft.start}
+                        playing={playing}
+                        recording={recording}
+                        onVideoVolume={(vol) => {
+                            if (video.current) video.current.volume = vol;
+                        }}
                     />
                     <div className="flex items-center gap-3 text-sm">
                         <Button variant="primary" onClick={toggle} aria-label={playing ? "Pause" : "Play"}>
@@ -287,7 +363,7 @@ function EditorBody({ clip, asset }: { clip: Clip; asset: Asset }) {
                     </div>
                     <p className="max-w-[315px] text-center text-xs text-neutral-500">
                         Same fonts and caption layout as the export (only edge smoothing differs). Drag the
-                        picture to reframe.
+                        picture to reframe, or an overlay to move it.
                     </p>
                 </div>
 
@@ -474,6 +550,45 @@ function EditorBody({ clip, asset }: { clip: Clip; asset: Asset }) {
                             </div>
                         </Field>
                     </section>
+
+                    <OverlayPanel
+                        overlays={draft.edit.overlays}
+                        styles={overlayStylesQ.data?.items ?? []}
+                        length={len}
+                        t={now - draft.start}
+                        selected={selected}
+                        onSelect={setSelected}
+                        onChange={(overlays) => setEdit((e) => ({ ...e, overlays }))}
+                        onSeek={(s) => seek(draft.start + s)}
+                    />
+                    <ErrorBox error={layoutQ.error} />
+
+                    <VoicePanel
+                        clipId={clipId}
+                        takes={takes}
+                        voiceovers={draft.edit.voiceovers}
+                        audio={draft.edit.audio}
+                        savedIds={new Set(clip.edit.voiceovers.map((v) => v.track_id))}
+                        segments={voiceSegments}
+                        length={len}
+                        t={now - draft.start}
+                        onChange={(voiceovers, audio) => setEdit((e) => ({ ...e, voiceovers, audio }))}
+                        onTakesChanged={() => void qc.invalidateQueries({ queryKey: ["voice", clipId] })}
+                        onPlayFrom={(t0, muted, onPaused) => {
+                            const v = video.current;
+                            if (!v) return;
+                            v.currentTime = draft.start + t0;
+                            v.muted = muted;
+                            void v.play().then(() => v.addEventListener("pause", onPaused, { once: true }));
+                        }}
+                        onStopPlayback={() => {
+                            const v = video.current;
+                            if (!v) return;
+                            v.pause();
+                            v.muted = false;
+                        }}
+                        onRecording={setRecording}
+                    />
 
                     <section className="space-y-3">
                         <h3 className="text-sm font-semibold">Framing (9:16)</h3>

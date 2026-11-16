@@ -176,6 +176,26 @@ class Export(Base):
     finished_at: Mapped[float | None] = mapped_column(Float, nullable=True)
 
 
+class VoiceTrack(Base):
+    """A take of the user's own commentary for one clip (recorded in the browser or uploaded). The file is
+    `voice.flac` under the asset's `voice/{id}/` folder; placement and levels live in the clip's edit."""
+
+    __tablename__ = "voice_tracks"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=new_id)
+    project_id: Mapped[str] = mapped_column(
+        String(32), ForeignKey("projects.id", ondelete="CASCADE"), index=True
+    )
+    asset_id: Mapped[str] = mapped_column(String(32), ForeignKey("assets.id", ondelete="CASCADE"), index=True)
+    clip_id: Mapped[str] = mapped_column(String(32), ForeignKey("clips.id", ondelete="CASCADE"), index=True)
+    name: Mapped[str] = mapped_column(String(100))
+    duration_ms: Mapped[int] = mapped_column(Integer)
+    loudness_lufs: Mapped[float | None] = mapped_column(Float, nullable=True)
+    segments: Mapped[list[list[float]]] = mapped_column(JSON, default=list)  # speech [[s, e], ...] seconds
+    peaks: Mapped[list[int]] = mapped_column(JSON, default=list)  # 0..255, 20 per second
+    created_at: Mapped[float] = mapped_column(Float, default=time.time)
+
+
 class Job(Base):
     """A unit of background work. The table *is* the queue (see clipper.jobs.queue)."""
 

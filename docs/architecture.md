@@ -1,4 +1,4 @@
-# Architecture — as implemented (M5)
+# Architecture — as implemented (M5, M6 in progress)
 
 Target architecture: [PHASE1_PLAN.md §6](PHASE1_PLAN.md). This page describes only what exists in code today.
 
@@ -106,6 +106,34 @@ render.export: ASS script + font copied to <export>/work
 - Tests: `backend/tests/test_render.py` (unit, golden end-to-end renders on generated media, API rules),
   `frontend/e2e/editor.spec.ts` (export + download), `frontend/e2e/speech.spec.ts` (full flow with real speech
   recognition on OS text-to-speech audio).
+
+## Text overlays (M6)
+- `edit/overlays.py`: three styles (title, callout, label) built on the caption `Preset` type and fonts, and
+  `layout()`: balanced wrapping (user line breaks kept), shrink-to-fit per line, clamping the block inside the
+  frame margins, and cutting times to the clip. The layout is computed only on the server — the editor previews
+  unsaved overlays through `POST /overlays/layout` — so preview and export agree.
+- The export snapshot stores the laid-out overlays; `render/ass.py` writes them into the same ASS script as the
+  captions, on layers 2–3 above them, with their own styles (`Ov<style>`, `Ov<style>Box`). A clip with overlays
+  but captions off still runs the `ass` filter. The manifest lists the overlays.
+- Tests: `tests/test_overlays.py` (layout, validation, rendered glyph centre and baseline vs preview maths within
+  3 px, export showing the overlay only in its time window), Playwright (add, drag, persist, export).
+
+## Voiceover and ducking (M6)
+- Takes: `api/voice.py` streams the upload to `projects/{p}/assets/{a}/voice/{id}/`, `media/voice.py` converts
+  it to FLAC and measures loudness (ebur128), speech segments (20 ms RMS frames within 28 dB of the take's loud
+  parts, short gaps bridged) and peaks. Table `voice_tracks` (migration 0006); deleting the clip removes them.
+- Ducking maths lives in `edit/voice.py` (placement → merged clip-time segments, `duck_gain`, and the same
+  function as an FFmpeg `volume` expression with a balanced `max()` tree). `frontend/src/lib/ducking.ts` ports it
+  for the preview; both are checked against `testdata/ducking_cases.json`.
+- Render: the audio is now a `filter_complex` mix — `[0:a]` (levelled, user gain, ducked) + each take
+  (`adelay`) → `amix` → trimmed/padded to the clip → the loudness plan; the two-pass measurement runs on the mix.
+  Take files are FFmpeg inputs (`-i`, FLAC-only whitelist), never paths inside the filter string.
+- Preview: hidden `<audio>` elements follow the playhead; the video's volume follows `duck_gain`. Browser volume
+  cannot exceed 1, so boosts above 0 dB are only heard in the export.
+- Recording: `MediaRecorder` (Opus in WebM/Ogg, or MP4) while the clip plays from the playhead, muted by default
+  to avoid echo; it stops at the clip end. Tests: `tests/test_voice.py` (speech detection, vectors, API, an export
+  whose 440 Hz original measures ~12 dB lower under a 1 kHz voice, muted original), Playwright with Chromium's
+  fake microphone.
 
 ## Not yet implemented
 Face-following / animated framing (crop is static per clip), hardware encoders (NVENC/QSV/VideoToolbox),

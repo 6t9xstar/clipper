@@ -4,6 +4,13 @@ versioning: [SemVer](https://semver.org/).
 
 ## [Unreleased]
 ### Added
+- M6 (in progress) voiceover: record commentary in the editor while the clip plays (or upload a recording), place
+  takes, set video/voice levels and ducking; exports level voice against the original, duck the original while
+  you speak and normalise the mix. Preview plays takes in sync with the same ducking curve. Manifest lists takes and
+  voice coverage. `POST/GET /clips/{id}/voice`, `GET /voice/{id}/audio`, `DELETE /voice/{id}`.
+- M6 (in progress) text overlays: chapter titles, callouts and labels with start/end times, dragged into place in
+  the preview and burned into exports above the captions. Server-side layout (`POST /overlays/layout`,
+  `GET /overlay-styles`) keeps preview and export identical; listed in the export manifest.
 - M5 render & export: `POST /clips/{id}/exports` renders the saved clip to a 9:16 MP4 (H.264/AAC, burned-in
   captions via libass, crop or blurred-background fit) in three qualities, plus SRT/VTT caption files and a
   `clip.json` manifest. Settings are frozen per export (with a hash; duplicate requests reuse the running export).

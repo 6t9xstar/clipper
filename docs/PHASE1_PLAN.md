@@ -525,3 +525,17 @@ Local-first; no telemetry by default; data deletion = hard delete of DB rows + f
 - **No hardware encoders yet** (libx264 only); bitrate caps added after grainy footage produced oversized files.
 - v0.1.0 tag waits for the "E2E on all 3 OS CI runners" acceptance criterion: the workflow exists but GitHub
   Actions has not run on this repository yet.
+
+## 18. M6 delivery order and revisions (started 2026-11-16)
+M6 is delivered in slices, each tested end to end before the next; the "transformation" tools come first because
+§3 makes them v1.0 requirements:
+1. Text/annotation overlays — **done** (title, callout, label; server-side layout shared with the preview).
+2. Voiceover recording (MediaRecorder) + ducking — **done** (deterministic ducking from measured speech segments,
+   shared by export and preview, instead of a sidechain compressor whose result the preview could not match).
+3. Monetization-readiness checklist (uses overlay/voiceover signals).
+4. Brand kit: logo watermark, progress bar, intro/outro, user fonts (licence reminder).
+5. Split-screen layouts (facecam + gameplay rectangles) and templates incl. gaming.
+6. Batch export + render concurrency; animated/keyword captions.
+7. Diarization opt-in; hardware encoder detection with fallback.
+8. Multi-user mode, PostgreSQL, Docker Compose.
+- Overlays are text only for now (no arrows/shapes); callouts point with text and position.

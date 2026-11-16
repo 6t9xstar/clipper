@@ -26,8 +26,10 @@ from clipper.api.clips import _bounds, _expected_version, _load, _read_transcrip
 from clipper.api.errors import ApiError
 from clipper.api.schemas import ExportCreate, ExportOut, Page
 from clipper.core.services import Services
-from clipper.db.models import TERMINAL, AssetStatus, Clip, Export, ExportStatus, Job, JobStatus
+from clipper.db.models import TERMINAL, AssetStatus, Clip, Export, ExportStatus, Job, JobStatus, VoiceTrack
+from clipper.edit import voice as vo
 from clipper.edit.captions import PRESETS, group_words
+from clipper.edit.overlays import layout_all as overlay_layout
 from clipper.edit.schema import normalised
 from clipper.render import subs
 from clipper.render.export import export_prefix
@@ -80,6 +82,24 @@ def _export(svc: Services, export_id: str) -> Export:
     return e
 
 
+def voice_snapshot(svc: Services, c: Clip, edit: dict[str, Any]) -> dict[str, Any]:
+    """Placed takes with their files and measurements, the merged ducking segments and voice coverage."""
+    from clipper.api.voice import voice_key
+
+    dur = (c.end_ms - c.start_ms) / 1000
+    ids = [v["track_id"] for v in edit["voiceovers"]]
+    with svc.db.session() as s:
+        tracks = {t.id: t for t in s.scalars(select(VoiceTrack).where(VoiceTrack.id.in_(ids)))} if ids else {}
+        takes = [
+            {"track_id": t.id, "key": voice_key(t), "name": t.name, "start": v["start"],
+             "duration": t.duration_ms / 1000, "loudness_lufs": t.loudness_lufs, "segments": t.segments}
+            for v in edit["voiceovers"]
+            if (t := tracks.get(v["track_id"])) is not None and v["start"] < dur
+        ]  # fmt: skip
+    segs = vo.placed_segments(((tk["start"], tk["segments"]) for tk in takes), dur)
+    return {"audio": edit["audio"], "takes": takes, "segments": segs, "coverage": vo.coverage(segs, dur)}
+
+
 def settings_for(svc: Services, c: Clip, quality: str) -> dict[str, Any]:
     """Everything the renderer needs, frozen now: later edits never change a queued export."""
     a = _get(svc, c.asset_id)
@@ -108,8 +128,10 @@ def settings_for(svc: Services, c: Clip, quality: str) -> dict[str, Any]:
         "edit": edit,
         "quality": quality,
         "groups": groups,
+        "overlays": overlay_layout(edit["overlays"], (c.end_ms - c.start_ms) / 1000),
+        "voice": voice_snapshot(svc, c, edit),
         "transcript": transcript,
-        "renderer": 1,  # bump when output for the same settings changes
+        "renderer": 2,  # bump when output for the same settings changes
     }
     st["hash"] = hashlib.sha256(json.dumps(st, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
     return st

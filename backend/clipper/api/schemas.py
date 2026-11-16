@@ -4,7 +4,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from clipper.edit.schema import ClipEdit, normalised
+from clipper.edit.schema import ClipEdit, OverlayEdit, normalised
 
 
 def _clean_name(v: str | None) -> str | None:
@@ -215,6 +215,12 @@ class WordEdit(BaseModel):
 
 class TranscriptEdit(BaseModel):
     words: list[WordEdit] = Field(min_length=1, max_length=2000)
+
+
+class OverlayLayoutIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    overlays: list[OverlayEdit] = Field(max_length=20)
+    duration: float = Field(gt=0, le=600, description="Clip length in seconds (overlays are cut to it)")
 
 
 class ExportCreate(BaseModel):

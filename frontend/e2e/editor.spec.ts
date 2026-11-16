@@ -68,6 +68,32 @@ test("import, make a clip, edit it and the edits persist", async ({ page }) => {
     await page.getByRole("radio", { name: "Whole frame on blur" }).click();
     await page.getByLabel("Title (for your own reference)").fill("Pattern test clip");
 
+    // a chapter-title overlay: add it, type, show it, drag it down in the preview
+    const overlays = page.getByRole("region", { name: "Text overlays" });
+    await overlays.getByRole("button", { name: "+ Chapter title" }).click();
+    await overlays.getByLabel("Overlay 1 text").fill("Pattern test");
+    await overlays.getByRole("button", { name: "Show" }).click();
+    const ov = page.getByTestId("overlay");
+    await expect(ov).toHaveText(/PATTERN TEST/); // uppercase style, laid out by the server
+    const line = ov.locator("div").first();
+    const before = (await line.boundingBox())!;
+    await page.mouse.move(before.x + before.width / 2, before.y + before.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(before.x + before.width / 2, before.y + before.height / 2 + 120, { steps: 6 });
+    await page.mouse.up();
+    await expect.poll(async () => (await line.boundingBox())!.y).toBeGreaterThan(before.y + 80);
+
+    // a voiceover take recorded from the (fake) microphone while the clip plays, placed automatically
+    const voice = page.getByRole("region", { name: "Voiceover" });
+    await voice.getByRole("button", { name: "● Record from the playhead" }).click();
+    const stopRec = voice.getByRole("button", { name: /Stop/ });
+    await expect(stopRec).toBeVisible();
+    await page.waitForTimeout(3000);
+    await stopRec.click();
+    await expect(voice.getByTestId("voice-placement")).toHaveCount(1, { timeout: 30_000 });
+    await expect(voice.getByTestId("voice-placement")).toContainText("Take 1");
+    await expect(voice.getByLabel("Ducking")).toHaveValue("-12");
+
     await page.getByRole("button", { name: "Save changes" }).click();
     await expect(page.getByRole("button", { name: "Saved" })).toBeVisible();
 
@@ -83,6 +109,13 @@ test("import, make a clip, edit it and the edits persist", async ({ page }) => {
         "true",
     );
     await expect(page.getByLabel("Title (for your own reference)")).toHaveValue("Pattern test clip");
+    await expect(page.getByLabel("Overlay 1 text")).toHaveValue("Pattern test");
+    const id = page.url().split("/").pop()!;
+    const saved = (await (await page.request.get(`/api/v1/clips/${id}`)).json()) as {
+        edit: { overlays: { y: number }[] };
+    };
+    expect(saved.edit.overlays[0]!.y).toBeGreaterThan(0.25); // the drag moved it down from 0.15
+    await expect(page.getByTestId("voice-placement")).toHaveCount(1);
 
     // the 9:16 preview keeps its aspect ratio
     const box = await page.getByTestId("preview").boundingBox();
@@ -103,6 +136,13 @@ test("import, make a clip, edit it and the edits persist", async ({ page }) => {
         row.getByRole("link", { name: "Download MP4" }).click(),
     ]);
     expect(dl.suggestedFilename()).toMatch(/^pattern-test-clip-[0-9a-f]{6}\.mp4$/);
+    const exportId = (await row.getByRole("link", { name: "Details" }).getAttribute("href"))!.split("/")[4]!;
+    const manifest = (await (await page.request.get(`/api/v1/exports/${exportId}/files/json`)).json()) as {
+        voiceover: { takes: { name: string }[] } | null;
+        overlays: { text: string }[];
+    };
+    expect(manifest.voiceover?.takes.map((t) => t.name)).toEqual(["Take 1"]);
+    expect(manifest.overlays[0]!.text).toBe("PATTERN TEST");
     const { size } = statSync((await dl.path())!);
     expect(size).toBeGreaterThan(20_000);
     // editing again makes the export "from an earlier version" and blocks a new export until saved

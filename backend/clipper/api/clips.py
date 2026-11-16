@@ -10,6 +10,8 @@ PATCH  /clips/{id}               requires If-Match: "<version>" (412 VERSION_CON
 DELETE /clips/{id}
 GET    /clips/{id}/captions      caption groups for the clip (same data the renderer uses)
 GET    /caption-presets
+GET    /overlay-styles
+POST   /overlays/layout       layout of (unsaved) text overlays for the preview
 """
 
 from __future__ import annotations
@@ -31,12 +33,15 @@ from clipper.api.schemas import (
     ClipOut,
     ClipUpdate,
     JobOut,
+    OverlayLayoutIn,
     Page,
     TranscriptEdit,
 )
 from clipper.core.services import Services
 from clipper.db.models import TERMINAL, Asset, AssetStatus, Clip, ClipStatus, Job, Transcript
 from clipper.edit.captions import PRESETS, group_words
+from clipper.edit.overlays import STYLES as OVERLAY_STYLES
+from clipper.edit.overlays import layout_all as overlay_layout
 from clipper.edit.schema import normalised
 from clipper.media.importer import asset_prefix
 
@@ -265,6 +270,8 @@ def update_clip(
     start, end = changes.get("start_ms", c.start_ms), changes.get("end_ms", c.end_ms)
     if "start_ms" in changes or "end_ms" in changes:
         _bounds(a, start, end)
+    if "edit" in changes:
+        _check_voice(svc, c, changes["edit"])
     with svc.db.session() as s:
         # compare-and-swap in one statement: atomic on SQLite and PostgreSQL alike
         res = s.execute(
@@ -288,6 +295,21 @@ def update_clip(
         return _clip_response(row)
 
 
+def _check_voice(svc: Services, c: Clip, edit: dict[str, Any]) -> None:
+    from clipper.db.models import VoiceTrack
+
+    wanted = {v["track_id"] for v in edit.get("voiceovers", [])}
+    if not wanted:
+        return
+    with svc.db.session() as s:
+        have = set(
+            s.scalars(select(VoiceTrack.id).where(VoiceTrack.clip_id == c.id, VoiceTrack.id.in_(wanted)))
+        )
+    if wanted - have:
+        raise ApiError(422, "VOICE_NOT_FOUND", "A placed voice recording does not belong to this clip.",
+                       "Record or upload it for this clip first.")  # fmt: skip
+
+
 @router.delete("/clips/{clip_id}", status_code=204)
 def delete_clip(clip_id: str, svc: Svc) -> Response:
     from clipper.api.exports import stop_exports
@@ -302,6 +324,9 @@ def delete_clip(clip_id: str, svc: Svc) -> Response:
         export_ids = list(s.scalars(select(Export.id).where(Export.clip_id == c.id)))
     for eid in export_ids:  # the rows go with the clip (FK cascade); the files must go too
         svc.storage.delete_prefix(export_prefix(c.project_id, c.asset_id, eid))
+    from clipper.api.voice import delete_clip_voice
+
+    delete_clip_voice(svc, c)
     with svc.db.session() as s:
         row = s.get(Clip, c.id)
         if row is not None:
@@ -312,6 +337,17 @@ def delete_clip(clip_id: str, svc: Svc) -> Response:
 @router.get("/caption-presets")
 def caption_presets() -> dict[str, Any]:
     return {"items": [p.to_json() for p in PRESETS.values()], "frame": {"width": 1080, "height": 1920}}
+
+
+@router.get("/overlay-styles")
+def overlay_styles() -> dict[str, Any]:
+    return {"items": [p.to_json() for p in OVERLAY_STYLES.values()], "frame": {"width": 1080, "height": 1920}}
+
+
+@router.post("/overlays/layout")
+def overlays_layout(body: OverlayLayoutIn) -> dict[str, Any]:
+    """Pure computation, so the editor can preview overlays before they are saved."""
+    return {"items": overlay_layout([o.model_dump() for o in body.overlays], body.duration)}
 
 
 @router.get("/clips/{clip_id}/captions")

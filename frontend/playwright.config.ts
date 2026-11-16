@@ -21,7 +21,16 @@ export default defineConfig({
     projects: [
         {
             name: channel,
-            use: { ...devices["Desktop Chrome"], channel, viewport: { width: 1280, height: 900 } },
+            use: {
+                ...devices["Desktop Chrome"],
+                channel,
+                viewport: { width: 1280, height: 900 },
+                // a generated microphone signal (beeps) for the voiceover recording flow
+                permissions: ["microphone"],
+                launchOptions: {
+                    args: ["--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream"],
+                },
+            },
         },
     ],
     webServer: {

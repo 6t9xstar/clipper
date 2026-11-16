@@ -77,9 +77,64 @@ export interface FramingEdit {
     zoom: number;
 }
 
+export type OverlayStyleId = "title" | "callout" | "label";
+
+/** A text overlay as stored in the clip edit; times are seconds from the clip start, x/y frame fractions. */
+export interface OverlayEdit {
+    id: string;
+    style: OverlayStyleId;
+    text: string;
+    start: number;
+    end: number;
+    x: number;
+    y: number;
+}
+
+/** Server layout of an overlay (POST /overlays/layout): px of the 1080x1920 frame. */
+export interface OverlayLayout {
+    id: string;
+    style: OverlayStyleId;
+    s: number;
+    e: number;
+    lines: string[];
+    fit: number[];
+    x: number;
+    ys: number[];
+}
+
+/** A voice take placed in the clip, playing from `start` seconds after the clip start. */
+export interface VoiceoverEdit {
+    track_id: string;
+    start: number;
+}
+
+export interface AudioEdit {
+    original_db: number;
+    mute_original: boolean;
+    voice_db: number;
+    /** how far the original is turned down while the voice speaks; 0 = off */
+    duck_db: number;
+}
+
 export interface ClipEdit {
     captions: CaptionsEdit;
     framing: FramingEdit;
+    overlays: OverlayEdit[];
+    voiceovers: VoiceoverEdit[];
+    audio: AudioEdit;
+}
+
+/** A recorded or uploaded voice take (POST /clips/{id}/voice). */
+export interface VoiceTrack {
+    id: string;
+    clip_id: string;
+    name: string;
+    duration_ms: number;
+    loudness_lufs: number | null;
+    /** speech stretches in seconds from the take start */
+    segments: [number, number][];
+    peaks: number[];
+    created_at: number;
 }
 
 export interface Clip {

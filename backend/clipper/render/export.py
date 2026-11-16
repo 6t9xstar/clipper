@@ -24,6 +24,7 @@ from typing import Any
 from clipper import __version__
 from clipper.core.logging import log
 from clipper.db.models import Asset, Export, ExportStatus
+from clipper.edit import voice as vo
 from clipper.edit.captions import PRESETS
 from clipper.jobs import proc
 from clipper.jobs.errors import JobCancelled, JobError
@@ -127,6 +128,57 @@ def verify(
     return checks
 
 
+VOICE_REF_LUFS = -18.0  # takes and the original are levelled to this before the user's offsets
+MAX_LEVELLING_DB = 20.0
+
+
+def _level(lufs: float | None) -> float:
+    if lufs is None or lufs < graph.SILENT_LUFS:
+        return 0.0
+    return round(min(MAX_LEVELLING_DB, max(-MAX_LEVELLING_DB, VOICE_REF_LUFS - lufs)), 2)
+
+
+def _build_mix(ctx: JobContext, svc: Any, src: graph.Source, start: float, dur: float,
+               voice: dict[str, Any]) -> tuple[graph.Mix, float | None]:  # fmt: skip
+    """The clip's sound before normalisation: original (user gain, ducked) + levelled voice takes.
+
+    Returns the mix and, when takes are used, the original's measured loudness."""
+    cfg = {
+        "original_db": 0.0,
+        "mute_original": False,
+        "voice_db": 0.0,
+        "duck_db": -12.0,
+        **voice.get("audio", {}),
+    }
+    takes = voice.get("takes") or []
+    use_orig = src.has_audio and not cfg["mute_original"]
+    orig_gain = float(cfg["original_db"])
+    source_lufs = None
+    if takes and use_orig:
+        r = proc.run(
+            graph.loudness_cmd(src, start, dur), should_cancel=ctx.is_cancelled, timeout=max(300.0, dur * 4)
+        )
+        m = graph.parse_loudnorm(r.stderr.decode("utf-8", "replace"))
+        source_lufs = m["input_i"] if m else None
+        orig_gain += _level(source_lufs)
+    voices = []
+    for t in takes:
+        path = svc.storage.path(t["key"])
+        if not path.exists():
+            raise JobError(f"voice recording {t['track_id']} is missing", code="VOICE_MISSING")
+        voices.append(
+            graph.Voice(path, float(t["start"]), _level(t.get("loudness_lufs")) + float(cfg["voice_db"]))
+        )
+    duck = (
+        vo.duck_expr([tuple(x) for x in voice.get("segments", [])], float(cfg["duck_db"]))
+        if use_orig
+        else None
+    )
+    mix = graph.Mix(original=use_orig, original_gain_db=round(orig_gain, 2), voices=tuple(voices),
+                    duck=duck if voices else None)  # fmt: skip
+    return mix, source_lufs
+
+
 @handler("render.export")
 def render_export(ctx: JobContext) -> dict[str, Any]:
     export_id = str(ctx.payload["export_id"])
@@ -167,6 +219,9 @@ def render_export(ctx: JobContext) -> dict[str, Any]:
     groups: list[dict[str, Any]] = st.get("groups") or []
     captions = bool(edit["captions"]["enabled"] and groups)
     preset = PRESETS[edit["captions"]["preset"]]
+    overlays: list[dict[str, Any]] = st.get("overlays") or []
+    voice_takes: list[dict[str, Any]] = (st.get("voice") or {}).get("takes") or []
+    burn = captions or bool(overlays)  # anything for libass to draw
 
     prefix = export_prefix(project_id, asset_id, export_id)
     out_dir = svc.storage.path(prefix)
@@ -175,35 +230,35 @@ def render_export(ctx: JobContext) -> dict[str, Any]:
     work.mkdir(parents=True, exist_ok=True)
     try:
         ctx.progress(0.01, "Preparing captions")
-        if captions:
-            (work / graph.ASS_NAME).write_text(
-                ass.build(groups, preset, edit["captions"]["position"], dur), encoding="utf-8"
-            )
+        if burn:
+            script = ass.build(groups, preset, edit["captions"]["position"], dur, overlays, captions=captions)
+            (work / graph.ASS_NAME).write_text(script, encoding="utf-8")
             fonts = work / graph.FONTS_NAME
             fonts.mkdir()
-            shutil.copy2(fontinfo.FONTS_DIR / preset.font_file, fonts / preset.font_file)
+            for name in ass.fonts_for(preset, overlays):
+                shutil.copy2(fontinfo.FONTS_DIR / name, fonts / name)
 
-        measured = None
-        if src.has_audio:
-            ctx.progress(0.03, "Measuring loudness")
-            r = proc.run(
-                graph.loudness_cmd(src, start, dur),
-                should_cancel=ctx.is_cancelled,
-                timeout=max(300.0, dur * 4),
-            )
+        ctx.progress(0.03, "Measuring loudness")
+        mix, source_lufs = _build_mix(ctx, svc, src, start, dur, st.get("voice") or {})
+
+        def measure_mix() -> dict[str, float] | None:
+            r = proc.run(graph.loudness_cmd(src, start, dur, mix), should_cancel=ctx.is_cancelled,
+                         timeout=max(300.0, dur * 4))  # fmt: skip
             if r.returncode != 0:
                 raise JobError(
                     "loudness measurement failed: " + r.stderr.decode("utf-8", "replace")[-300:],
                     code="RENDER_FAILED",
                 )
-            measured = graph.parse_loudnorm(r.stderr.decode("utf-8", "replace"))
+            return graph.parse_loudnorm(r.stderr.decode("utf-8", "replace"))
+
+        measured = measure_mix() if mix.has_audio else None
         audio = graph.audio_plan(measured)
         if audio.mode == "limited":
             # the limiter takes some loudness back: measure and correct the gain (audio only, fast)
             for _ in range(3):
                 ctx.check_cancel()
-                r = proc.run(graph.measure_cmd(src, start, dur, audio.filter), should_cancel=ctx.is_cancelled,
-                             timeout=max(300.0, dur * 4))  # fmt: skip
+                cmd = graph.measure_cmd(src, start, dur, audio.filter, mix)
+                r = proc.run(cmd, should_cancel=ctx.is_cancelled, timeout=max(300.0, dur * 4))
                 got = graph.parse_ebur128(r.stderr.decode("utf-8", "replace"))
                 if got is None or abs(got - graph.TARGET_LUFS) <= 0.3:
                     break
@@ -224,7 +279,7 @@ def render_export(ctx: JobContext) -> dict[str, Any]:
                 ctx.report(0.08 + 0.82 * min(1.0, max(0.0, f)), "Rendering")
 
         ctx.progress(0.08, "Rendering")
-        argv = graph.render_cmd(src, start, dur, edit, q, captions=captions, audio=audio, out=part)
+        argv = graph.render_cmd(src, start, dur, edit, q, captions=burn, audio=audio, out=part, mix=mix)
         r = proc.run(
             argv,
             should_cancel=ctx.is_cancelled,
@@ -240,7 +295,7 @@ def render_export(ctx: JobContext) -> dict[str, Any]:
 
         ctx.progress(0.92, "Checking the result")
         loud = peak = None
-        if src.has_audio:
+        if mix.has_audio:
             r = proc.run(graph.ebur128_cmd(part), should_cancel=ctx.is_cancelled, timeout=max(300.0, dur * 4))
             loud = graph.parse_ebur128(r.stderr.decode("utf-8", "replace"))
             peak = graph.parse_true_peak(r.stderr.decode("utf-8", "replace"))
@@ -251,7 +306,7 @@ def render_export(ctx: JobContext) -> dict[str, Any]:
             expect_h=q.height,
             expect_dur=dur,
             fps=fps,
-            has_audio=src.has_audio,
+            has_audio=mix.has_audio,
             loud=loud,
             peak=peak,
             audio=audio,
@@ -288,11 +343,24 @@ def render_export(ctx: JobContext) -> dict[str, Any]:
                 "sample_rate": 48000,
                 "loudness_target_lufs": graph.TARGET_LUFS,
                 "loudness_lufs": loud,
-                "source_loudness_lufs": measured["input_i"] if measured else None,
+                "source_loudness_lufs": source_lufs
+                if source_lufs is not None
+                else (measured["input_i"] if measured and not voice_takes else None),
                 "true_peak_dbtp": peak,
                 "processing": {"mode": audio.mode, "gain_db": audio.gain_db},
             }
-            if src.has_audio
+            if mix.has_audio
+            else None,
+            "voiceover": {
+                "takes": [
+                    {"name": t["name"], "start_s": t["start"], "duration_s": t["duration"]}
+                    for t in voice_takes
+                ],
+                "coverage": (st.get("voice") or {}).get("coverage", 0.0),
+                "original_muted": not mix.original,
+                "duck_db": (st.get("voice") or {}).get("audio", {}).get("duck_db"),
+            }
+            if voice_takes
             else None,
             "captions": {
                 "burned_in": captions,
@@ -301,6 +369,10 @@ def render_export(ctx: JobContext) -> dict[str, Any]:
                 "screens": len(groups),
                 "transcript": st.get("transcript"),
             },
+            "overlays": [
+                {"style": o["style"], "text": " / ".join(o["lines"]), "start_s": o["s"], "end_s": o["e"]}
+                for o in overlays
+            ],
             "settings_hash": st.get("hash"),
             "checks": checks,
         }

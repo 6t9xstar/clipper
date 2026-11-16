@@ -15,7 +15,7 @@ from clipper.api.app import create_app
 from clipper.core.config import Settings
 from clipper.edit import captions as cap
 from clipper.edit.framing import crop_rect
-from clipper.edit.schema import normalised
+from clipper.edit.schema import ClipEdit, normalised
 
 from .test_analyze import analyze, calls, client, clips, video  # noqa: F401  (fixtures)
 from .test_import import import_file
@@ -173,8 +173,9 @@ def test_clip_edit_roundtrip(client: TestClient, analysed: tuple[str, dict[str, 
             "framing": {"mode": "crop", "x": 0.3, "y": 0.5, "zoom": 1.5}}  # fmt: skip
     r = client.patch(url, json={"edit": edit}, headers={"if-match": '"1"'})
     assert r.status_code == 200, r.json()
-    assert r.json()["edit"] == edit and r.json()["version"] == 2
-    assert client.get(url).json()["edit"] == edit
+    full = {**ClipEdit().model_dump(), **edit}  # missing parts come back with their defaults
+    assert r.json()["edit"] == full and r.json()["version"] == 2
+    assert client.get(url).json()["edit"] == full
     bad = client.patch(url, json={"edit": {"captions": {"preset": "nope"}}}, headers={"if-match": '"2"'})
     assert bad.status_code == 422
     extra = client.patch(url, json={"edit": {"framing": {"x": 0.5, "evil": 1}}}, headers={"if-match": '"2"'})

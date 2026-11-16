@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import { MAX_LEN, MIN_LEN, moveHandle, snapTo } from "../components/Timeline";
 import { ApiError } from "./api";
 import { activeGroup, px } from "./captions";
+import { type Seg, duckGain, placedSegments } from "./ducking";
 import { cropRect } from "./framing";
 import { bytes, fmt } from "./time";
 import type { Asset, CaptionGroup } from "./types";
@@ -120,5 +121,29 @@ describe("upload", () => {
 
     it("refuses a different file", async () => {
         await expect(uploadFile(asset, new Blob([new Uint8Array(3)]))).rejects.toBeInstanceOf(ApiError);
+    });
+});
+
+describe("ducking", () => {
+    it("matches the backend on the shared vectors (preview == export)", () => {
+        const file = resolve(import.meta.dirname, "../../../testdata/ducking_cases.json");
+        const cases = JSON.parse(readFileSync(file, "utf-8")) as {
+            segments: Seg[];
+            duck_db: number;
+            samples: [number, number][];
+        }[];
+        expect(cases.length).toBeGreaterThanOrEqual(4);
+        for (const c of cases)
+            for (const [t, want] of c.samples)
+                expect(duckGain(t, c.segments, c.duck_db)).toBeCloseTo(want, 6);
+    });
+    it("merges short pauses and drops what is outside the clip", () => {
+        const take: Seg[] = [
+            [0, 1],
+            [1.5, 2],
+            [4, 5],
+        ];
+        expect(placedSegments([{ start: 2, segments: take }], 6)).toEqual([[2, 4]]);
+        expect(placedSegments([{ start: -1, segments: [[0, 2]] }], 5)).toEqual([[0, 1]]);
     });
 });

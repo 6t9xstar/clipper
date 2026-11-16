@@ -21,7 +21,8 @@ Playwright flows on Linux, Windows and macOS with Chrome.
 The Playwright suite generates its own media. The speech test makes a narrated video with the operating system's
 text-to-speech (Windows SAPI, macOS `say`, Linux `espeak-ng`) and skips itself if none is available. Its first
 run downloads the `tiny` speech model (~75 MB); set `CLIPPER_E2E_MODELS=<folder>` to copy an existing models
-folder (e.g. `data/models`) instead. Backend tests write temporary files; if your system drive is short on space,
+folder (e.g. `data/models`) instead. The voiceover
+test records from Chromium's fake microphone (`--use-fake-device-for-media-stream`), so no real mic is needed. Backend tests write temporary files; if your system drive is short on space,
 add `--basetemp=<folder on another drive>` to `pytest`.
 
 ## Rules

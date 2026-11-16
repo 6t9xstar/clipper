@@ -139,7 +139,47 @@ the renderer will group them: `{"preset", "groups": [{"s", "e", "lines": [[{"w",
 relative to the clip start. `preset`/`start_ms`/`end_ms` preview unsaved choices. No transcript yet → empty
 `groups` with a `note`.
 
-### Correcting the transcript
+### Text overlays (M6)
+`edit.overlays` is a list (up to 20) of chapter titles, callouts and labels drawn on top of the video:
+```json
+{"id": "k3x9a1", "style": "title", "text": "Rule 1\nTen percent", "start": 0.5, "end": 3.0, "x": 0.5, "y": 0.15}
+```
+`id` is chosen by the client (`[a-z0-9]{1,16}`, unique in the clip). `style`: `title` | `callout` | `label`
+(`GET /api/v1/overlay-styles` lists them with fonts and colours). `text`: 1–120 printable characters, at most 4
+lines. `start`/`end` are seconds from the clip start (shown for at least 0.2 s); trimming the clip later cuts or
+hides overlays that fall outside it. `x`/`y` are the centre as fractions of the 9:16 frame. Invalid overlays are
+`422`.
+
+`POST /api/v1/overlays/layout {"overlays": [...], "duration": 12.5}` returns what will be drawn — wrapped lines,
+per-line scale, centre `x` and line centres `ys` in pixels of the 1080×1920 frame, after keeping the block inside
+the frame edges. The editor uses it to preview unsaved overlays; exports use the same function.
+
+### Voiceover (M6)
+Record or upload your own commentary for a clip, then place it in the edit:
+```
+POST   /api/v1/clips/{id}/voice?name=Take%201   body: the recording (audio/webm, audio/ogg, audio/mp4, audio/wav,
+                                                 audio/mpeg, audio/flac ...) -> 201 VoiceTrack
+GET    /api/v1/clips/{id}/voice                 takes of this clip
+GET    /api/v1/voice/{id}/audio                 the converted take (FLAC), for preview playback
+DELETE /api/v1/voice/{id}                       204, or 409 VOICE_IN_USE while the saved clip / a running export uses it
+```
+Each take is converted to 48 kHz mono FLAC (at most 10 min, 200 MB) and measured once: `duration_ms`,
+`loudness_lufs`, `segments` (where someone is speaking, seconds from the take start) and `peaks` (20/s).
+Errors: `415 VOICE_TYPE`, `422 VOICE_UNREADABLE` / `VOICE_TOO_SHORT`, `413 VOICE_TOO_LARGE`, `409 VOICE_LIMIT`
+(30 takes per clip).
+
+In the clip edit:
+```json
+{"voiceovers": [{"track_id": "01a1…", "start": 1.5}],
+ "audio": {"original_db": 0, "mute_original": false, "voice_db": 0, "duck_db": -12}}
+```
+`start` is seconds from the clip start (up to 10 placements); a take placed in another clip's edit is
+`422 VOICE_NOT_FOUND`. On export, each take and the video's sound are first levelled to −18 LUFS (at most ±20 dB),
+then `original_db`/`voice_db` apply, the video's sound is turned down by `duck_db` while the voice speaks
+(ramping 0.12 s before and 0.35 s after; pauses under 0.77 s stay ducked), and the whole mix is normalised as
+usual. The manifest's `voiceover` lists the takes and `coverage` (share of the clip with your voice).
+
+
 ```
 GET   /api/v1/assets/{id}/transcript                        -> ETag: "2", "version": 2, "edited": false
 PATCH /api/v1/assets/{id}/transcript   If-Match: "2"        {"words": [{"i": 41, "w": "joggers"}]}

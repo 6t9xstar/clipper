@@ -3,7 +3,8 @@
 Video:  source range -> deinterlace? -> 9:16 crop (edit.framing) or whole frame over a blurred copy
         -> 1080x1920 (or 720x1280) -> constant frame rate (max 60) -> burned captions (libass)
         -> yuv420p BT.709
-Audio:  EBU R128 two-pass loudness normalisation to -14 LUFS / -1.5 dBTP, 48 kHz stereo AAC.
+Audio:  original sound (gain, ducked under the voice) + voiceover takes (levelled, delayed) -> one mix
+        -> EBU R128 two-pass loudness normalisation to -14 LUFS / -1.5 dBTP, 48 kHz stereo AAC.
 The caption script and the bundled fonts are copied into the job's work folder and referenced by relative
 names (FFmpeg runs with that folder as cwd), so no file path ever has to be escaped inside a filter graph.
 """
@@ -118,22 +119,76 @@ def _input(src: Source, start: float, dur: float) -> list[str]:
     return [*SAFE_INPUT_ARGS, "-ss", f"{start:.3f}", "-t", f"{dur:.3f}", "-i", str(src.path)]
 
 
-def loudness_cmd(src: Source, start: float, dur: float) -> list[str]:
+AUDIO_INPUT_ARGS = ["-protocol_whitelist", "file", "-format_whitelist", "flac"]  # voice takes are FLAC
+STEREO = "aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo"
+
+
+@dataclass(frozen=True)
+class Voice:
+    path: Path  # passed as an -i argument, never inside the filter graph
+    start: float  # s from the clip start
+    gain_db: float
+
+
+@dataclass(frozen=True)
+class Mix:
+    """What goes into the clip's sound before loudness normalisation."""
+
+    original: bool = True  # the source's own audio (False: muted, or the source has none)
+    original_gain_db: float = 0.0
+    voices: tuple[Voice, ...] = ()
+    duck: str | None = None  # volume expression for the original (clipper.edit.voice.duck_expr)
+
+    @property
+    def has_audio(self) -> bool:
+        return self.original or bool(self.voices)
+
+
+def plain_mix(src: Source) -> Mix:
+    return Mix(original=src.has_audio)
+
+
+def _voice_inputs(mix: Mix) -> list[str]:
+    return [a for v in mix.voices for a in (*AUDIO_INPUT_ARGS, "-i", str(v.path))]
+
+
+def mix_graph(mix: Mix, dur: float) -> str:
+    """filter_complex fragment ending in [mix]: exactly `dur` seconds long, 48 kHz stereo float."""
+    parts: list[str] = []
+    labels: list[str] = []
+    if mix.original:
+        chain = f"[0:a:0]{STEREO}"
+        if mix.original_gain_db:
+            chain += f",volume={mix.original_gain_db:.2f}dB"
+        if mix.duck:
+            chain += f",volume='{mix.duck}':eval=frame"
+        parts.append(chain + "[o]")
+        labels.append("[o]")
+    for k, v in enumerate(mix.voices):
+        ms = max(0, round(v.start * 1000))
+        parts.append(f"[{k + 1}:a:0]{STEREO},volume={v.gain_db:.2f}dB,adelay=delays={ms}:all=1[v{k}]")
+        labels.append(f"[v{k}]")
+    if not labels:
+        raise ValueError("mix has no audio")
+    head = (
+        "".join(labels) + f"amix=inputs={len(labels)}:normalize=0:duration=longest,"
+        if len(labels) > 1
+        else labels[0]
+    )
+    parts.append(f"{head}atrim=end={dur:.3f},apad=whole_dur={dur:.3f}[mix]")
+    return ";".join(parts)
+
+
+def loudness_cmd(src: Source, start: float, dur: float, mix: Mix | None = None) -> list[str]:
     """First pass: measure the clip's loudness (printed as JSON on stderr)."""
+    m = mix or plain_mix(src)
     return [
-        tool("ffmpeg"),
-        "-hide_banner",
-        "-nostdin",
-        "-nostats",
-        *_input(src, start, dur),
-        "-map",
-        "0:a:0",
-        "-af",
-        f"loudnorm=I={TARGET_LUFS}:TP={TARGET_TP}:LRA={TARGET_LRA}:print_format=json",
-        "-f",
-        "null",
-        "-",
-    ]
+        tool("ffmpeg"), "-hide_banner", "-nostdin", "-nostats", *_input(src, start, dur), *_voice_inputs(m),
+        "-filter_complex",
+        mix_graph(m, dur) + f";[mix]loudnorm=I={TARGET_LUFS}:TP={TARGET_TP}:LRA={TARGET_LRA}"
+        ":print_format=json[m]",
+        "-map", "[m]", "-f", "null", "-",
+    ]  # fmt: skip
 
 
 def parse_loudnorm(stderr: str) -> dict[str, float] | None:
@@ -189,11 +244,15 @@ def audio_plan(measured: dict[str, float] | None, gain_db: float | None = None) 
     return AudioPlan("limited", round(min(want, cap), 2), capped=want > cap)
 
 
-def measure_cmd(src: Source, start: float, dur: float, audio_filter: str) -> list[str]:
+def measure_cmd(
+    src: Source, start: float, dur: float, audio_filter: str, mix: Mix | None = None
+) -> list[str]:
     """Loudness of the clip after `audio_filter` (used to refine the gain when the limiter is involved)."""
+    m = mix or plain_mix(src)
     return [
-        tool("ffmpeg"), "-hide_banner", "-nostdin", "-nostats", *_input(src, start, dur), "-map", "0:a:0",
-        "-af", f"{audio_filter},ebur128=peak=true:framelog=quiet", "-f", "null", "-",
+        tool("ffmpeg"), "-hide_banner", "-nostdin", "-nostats", *_input(src, start, dur), *_voice_inputs(m),
+        "-filter_complex", mix_graph(m, dur) + f";[mix]{audio_filter},ebur128=peak=true:framelog=quiet[m]",
+        "-map", "[m]", "-f", "null", "-",
     ]  # fmt: skip
 
 
@@ -207,7 +266,9 @@ def render_cmd(
     captions: bool,
     audio: AudioPlan,
     out: Path,
+    mix: Mix | None = None,
 ) -> list[str]:
+    m = mix or plain_mix(src)
     fps = out_fps(src.fps)
     gop = max(1, round(fps * 2))
     argv = [
@@ -218,17 +279,17 @@ def render_cmd(
         "-nostdin",
         "-y",
         *_input(src, start, dur),
+        *_voice_inputs(m),
         "-filter_complex",
-        video_filter(src, edit, q, captions),
+        video_filter(src, edit, q, captions)
+        + (f";{mix_graph(m, dur)};[mix]{audio.filter}[a]" if m.has_audio else ""),
         "-map",
         "[v]",
     ]
-    if src.has_audio:
+    if m.has_audio:
         argv += [
             "-map",
-            "0:a:0",
-            "-af",
-            audio.filter,
+            "[a]",
             "-c:a",
             "aac",
             "-b:a",
